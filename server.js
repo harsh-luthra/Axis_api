@@ -10,6 +10,8 @@ const { axisRequest } = require('./src/http/axisHttp');
 const config = require('./src/config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt, loadJoseKeys,  } = require('./src/security/jweJws');
 
+const { getBalance } = require('./src/api/getBalance.js');
+
 const crypto = require('crypto');
 
 const app = express();
@@ -67,6 +69,30 @@ function buildGetBalanceData(corpAccNum) {
 
   return { Data: data };
 }
+
+app.get('/test-get-balance', async (req, res) => {
+  try {
+    console.log('🔍 Testing Balance API...');
+    const result = await getBalance();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      rawAxisStatus: result.raw ? 200 : 'Error',
+      rawResponse: result.raw,
+      decrypted: result.decrypted,
+      balance: result.decrypted?.Data?.data?.Balance || 'N/A'
+    });
+  } catch (error) {
+    console.error('❌ Balance API Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      axisStatus: error.axisStatus || 500,
+      axisData: error.axisData
+    });
+  }
+});
 
 // --------- TEST BALANCE ENDPOINT ----------
 // Get Balance

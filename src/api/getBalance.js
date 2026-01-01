@@ -4,15 +4,16 @@ const { v4: uuidv4 } = require('uuid');
 const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
 // const { generateChecksum } = require('../security/checksum');
-const { generateChecksumAxis } = require('./security/checksumAxis');
+const { generateChecksumAxis } = require('../security/checksumAxis');
 
 const { axisRequest } = require('../http/axisHttp');
 
+// --------- HELPERS FOR GET BALANCE ----------
 function baseHeaders() {
-  const nowMillis = Date.now().toString();
+  const now = Date.now().toString();
   return {
     'Content-Type': 'text/plain',
-    'x-fapi-epoch-millis': nowMillis,
+    'x-fapi-epoch-millis': now,
     'x-fapi-channel-id': config.channelId,
     'x-fapi-uuid': uuidv4(),
     'x-fapi-serviceId': config.headersBase['x-fapi-serviceId'],

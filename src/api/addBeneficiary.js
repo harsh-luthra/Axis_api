@@ -24,7 +24,7 @@ function buildAddBeneficiaryData(beneDetails) {
   const data = {
     channelId: config.channelId,
     corpCode: config.corpCode,
-    userId: "kitepay_user", // Your system user
+    userId: "DEMOCORP159_USER1", // Your system user
     beneinsert: [{
       apiVersion: "1.0",
       beneCode: beneDetails.beneCode || `KITE_${Date.now()}`,
@@ -53,8 +53,8 @@ async function addBeneficiary(beneDetails) {
     console.log('🔍 URL:', url); // Debug
 
   const response = await axisRequest({
-    url,
     method: 'POST',
+    url,
     headers,
     data: encryptedAndSigned
   });
