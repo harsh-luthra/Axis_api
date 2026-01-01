@@ -1,23 +1,26 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-// const { decryptAes128Base64 } = require('./security/aesCallback');
-const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 
+const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 const { decryptAes256Callback } = require('./src/security/aesCallback');
+
+// NEW: imports for get balance
+const { v4: uuidv4 } = require('uuid');
+const { axisRequest } = require('./src/http/axisHttp');
+const config = require('./src/config/axisConfig');
+const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('./src/security/jweJws');
 
 const app = express();
 
-// Axis might send JSON or just the encrypted string; adjust parser as per their config.
 app.use(bodyParser.json());
-app.use(bodyParser.text({ type: '*/*' })); // to capture plain text encrypted body
+app.use(bodyParser.text({ type: '*/*' }));
 
-// Example callback endpoint
+// --------- CALLBACK (already working) ----------
 app.post('/axis/callback', async (req, res) => {
   try {
-    // If Axis posts { GetStatusResponseBodyEncrypted: "<cipher>" }
     const cipher = req.body.GetStatusResponseBodyEncrypted || req.body;
     const decryptedJson = decryptAes256Callback(cipher);
-    const parsed = JSON.parse(decryptedJson); // { data: { ... , checksum: '...' } } [file:1]
+    const parsed = JSON.parse(decryptedJson);
 
     const data = parsed.data || parsed.Data || parsed;
     const isValidChecksum = verifyChecksumAxis(data);
@@ -27,15 +30,79 @@ app.post('/axis/callback', async (req, res) => {
       return res.status(400).send('Checksum verification failed');
     }
 
-    // process transaction status
-    // e.g. crn, utrNo, transactionStatus, responseCode, etc.[file:1]
     console.log('Callback data:', data);
-
-    // Respond 200 to mark as success per docs.[file:1]
     res.status(200).send('OK');
   } catch (err) {
     console.error('Callback error', err);
     res.status(500).send('ERROR');
+  }
+});
+
+// --------- HELPERS FOR GET BALANCE ----------
+function buildHeaders() {
+  const now = Date.now().toString();
+  return {
+    'Content-Type': 'application/json',
+    'x-fapi-epoch-millis': now,
+    'x-fapi-channel-id': config.channelId,
+    'x-fapi-uuid': uuidv4(),
+    'x-fapi-serviceId': config.headersBase['x-fapi-serviceId'],
+    'x-fapi-serviceVersion': config.headersBase['x-fapi-serviceVersion'],
+    'X-IBM-Client-Id': config.clientId,
+    'X-IBM-Client-Secret': config.clientSecret
+  };
+}
+
+function buildGetBalanceData(corpAccNum) {
+  const data = {
+    corpAccNum,
+    channelId: config.channelId,
+    corpCode: config.corpCode
+  };
+  data.checksum = verifyChecksumAxis.generateChecksum
+    ? verifyChecksumAxis.generateChecksum(data)
+    : require('./src/security/checksumAxis').generateChecksumAxis(data); // depending on your export
+
+  return { Data: data };
+}
+
+// --------- TEST BALANCE ENDPOINT ----------
+app.get('/test-balance', async (req, res) => {
+  const corpAccNum =
+    req.query.acc ||
+    process.env.AXIS_TEST_CORP_ACC ||
+    '918010009499978';
+
+  try {
+    const url = config.urls[config.env].getBalance;
+    const headers = buildHeaders();
+    const body = buildGetBalanceData(corpAccNum);
+
+    const jwsPayload = await jweEncryptAndSign(body);
+
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    const root = decrypted.Data || decrypted.data || decrypted;
+
+    res.json({
+      rawAxisStatus: axisResp.status,
+      decrypted
+      // you can also expose root.data if you want only inner fields
+    });
+  } catch (err) {
+    const status = err.response?.status || 500;
+    res.status(status).json({
+      error: true,
+      message: err.message,
+      axisStatus: err.response?.status,
+      axisData: err.response?.data
+    });
   }
 });
 
