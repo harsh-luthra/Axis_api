@@ -2,7 +2,7 @@
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
-const { generateChecksumAxis } = require('./security/checksumAxis');
+const { generateChecksumAxis } = require('../security/checksumAxis');
 const { axisRequest } = require('../http/axisHttp');
 
 function baseHeaders() {

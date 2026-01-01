@@ -108,13 +108,13 @@ app.get('/test-balance', async (req, res) => {
 
 // /test-add-beneficiary
 app.post('/test-add-beneficiary', async (req, res) => {
-  const result = await require('../api/addBeneficiary').addBeneficiary(req.body);
+  const result = await require('./src/api/addBeneficiary').addBeneficiary(req.body);
   res.json(result);
 });
 
 // /test-bene-enquiry  
 app.post('/test-bene-enquiry', async (req, res) => {
-  const result = await require('../api/beneEnquiry').beneEnquiry(req.body);
+  const result = await require('./src/api/beneEnquiry').beneEnquiry(req.body);
   res.json(result);
 });
 
