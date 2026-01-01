@@ -12,7 +12,7 @@ const app = express();
 function buildHeaders() {
   const now = Date.now().toString();
   return {
-    'Content-Type': 'application/json',
+    'Content-Type': 'text/plain',
     'x-fapi-epoch-millis': now,
     'x-fapi-channel-id': config.channelId,
     'x-fapi-uuid': uuidv4(),

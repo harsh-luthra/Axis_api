@@ -4,6 +4,7 @@ const path = require('path');
 const {
   CompactEncrypt,
   CompactSign,
+  compactDecrypt,
   compactVerify,
   importPKCS8,
   importSPKI
@@ -54,34 +55,42 @@ const dec = new TextDecoder();
 
 async function jweEncryptAndSign(payloadObj) {
   const { privateKeyForSign, publicKeyForEncrypt } = await loadJoseKeys();
+  const enc = new TextEncoder();
+
   const payloadJson = JSON.stringify(payloadObj);
 
-  // JWE encrypt
+  console.log('PayLoad Json:', payloadJson);  
+
+  // JWE
   const jweCompact = await new CompactEncrypt(enc.encode(payloadJson))
     .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
     .encrypt(publicKeyForEncrypt);
 
-  console.log('JWE compact Encrypted:', jweCompact);  // log this string
+  console.log('JWE compact:', jweCompact);
 
-  // JWS sign JWE string
+  // JWS: sign RAW JWE string as bytes
   const jwsCompact = await new CompactSign(enc.encode(jweCompact))
-    .setProtectedHeader({ alg: 'RS256' })
+    .setProtectedHeader({ alg: 'RS256', cty: 'JWE' })
     .sign(privateKeyForSign);
 
-  console.log('JWE compact EncryptedSigned:', jweCompact);  // log this string
-
+  console.log('JWS compact:', jwsCompact);
   return jwsCompact;
 }
 
+// ? FIXED DECRYPT
 async function jweVerifyAndDecrypt(jwsCompact) {
   const { privateKeyForDecrypt, publicKeyForVerify } = await loadJoseKeys();
 
+  // 1. JWS Verify ? Extract JWE
   const { payload } = await compactVerify(jwsCompact, publicKeyForVerify);
   const jweCompact = dec.decode(payload);
+  console.log('?? Extracted JWE:', jweCompact);
 
-  const { decryptCompact } = await import('jose');
-  const decrypted = await decryptCompact(jweCompact, privateKeyForDecrypt);
-  return JSON.parse(dec.decode(decrypted.plaintext));
+  // 2. JWE Decrypt ? CORRECT FUNCTION!
+  const { plaintext, protectedHeader } = await compactDecrypt(jweCompact, privateKeyForDecrypt);
+  
+  console.log('? Header:', protectedHeader);
+  return JSON.parse(dec.decode(plaintext));
 }
 
 module.exports = {

@@ -10,7 +10,7 @@ const { axisRequest } = require('../http/axisHttp');
 function baseHeaders() {
   const nowMillis = Date.now().toString();
   return {
-    'Content-Type': 'application/json',
+    'Content-Type': 'text/plain',
     'x-fapi-epoch-millis': nowMillis,
     'x-fapi-channel-id': config.channelId,
     'x-fapi-uuid': uuidv4(),

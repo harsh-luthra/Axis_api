@@ -10,6 +10,8 @@ const { axisRequest } = require('./src/http/axisHttp');
 const config = require('./src/config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt, loadJoseKeys,  } = require('./src/security/jweJws');
 
+const crypto = require('crypto');
+
 const app = express();
 
 app.use(bodyParser.json());
@@ -42,7 +44,7 @@ app.post('/axis/callback', async (req, res) => {
 function buildHeaders() {
   const now = Date.now().toString();
   return {
-    'Content-Type': 'application/json',
+    'Content-Type': 'text/plain',
     'x-fapi-epoch-millis': now,
     'x-fapi-channel-id': config.channelId,
     'x-fapi-uuid': uuidv4(),
@@ -103,6 +105,20 @@ app.get('/test-balance', async (req, res) => {
   }
 });
 
+// // Should print: c59032929c876ef5e04d027b419d9c3d
+// console.log(generateChecksumAxisTest({
+//   corpAccNum: "918010009499978",
+//   channelId: "TXB",
+//   corpCode: "DEMOCORP9"
+// }));
+
+// // gave: 89840b0cde6c95841e5ab45bbd9afcbc
+
+// function generateChecksumAxisTest(data) {
+//   // EXACT order from Get Balance spec[file:2] + checksum doc[file:7]
+//   const str = `${data.corpAccNum}${data.channelId}${data.corpCode}`;
+//   return crypto.createHash('md5').update(str, 'utf8').digest('hex');
+// }
 
 const PORT = 3000;
 app.listen(PORT, () => {
