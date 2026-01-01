@@ -7,7 +7,7 @@ const p12Buffer = fs.readFileSync('./certs/keystore.p12');
 
 const axisHttpsAgent = new https.Agent({
   pfx: p12Buffer,
-  passphrase: 'P12_PASSWORD',      // as provided when Axis/you created it
+  passphrase: 'Axis1234@A',      // as provided when Axis/you created it
   // Optional: enforce cert validation
   rejectUnauthorized: true
 });
