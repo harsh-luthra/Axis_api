@@ -1,11 +1,8 @@
-// src/api/getBalance.js
-const axios = require('axios');
+// src/api/beneEnquiry.js
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
-// const { generateChecksum } = require('../security/checksum');
 const { generateChecksumAxis } = require('./security/checksumAxis');
-
 const { axisRequest } = require('../http/axisHttp');
 
 function baseHeaders() {
@@ -22,38 +19,37 @@ function baseHeaders() {
   };
 }
 
-function buildBalanceData(corpAccNum) {
+function buildBeneEnquiryData({ beneCode, status = 'All', emailId = 'dev@kitepay.in' } = {}) {
   const data = {
-    corpAccNum,
     channelId: config.channelId,
     corpCode: config.corpCode,
+    beneCode: beneCode || '',
+    status: status,
+    emailId: emailId,
     checksum: ''
   };
-//   data.checksum = generateChecksum(data);
+  
   data.checksum = generateChecksumAxis(data);
   return { Data: data };
 }
 
-async function getBalance() {
-  const corpAccNum = '309010100067740'
-  const url = config.urls[config.env].getBalance;
+async function beneEnquiry(queryParams) {
+  const url = config.urls[config.env].beneEnquiry; // /payee-mgmt/beneficiary-enquiry
   const headers = baseHeaders();
-  const body = buildBalanceData(corpAccNum);
+  const body = buildBeneEnquiryData(queryParams);
   const encryptedAndSigned = await jweEncryptAndSign(body);
 
-//   const response = await axios.post(url, encryptedAndSigned, { headers });
-
   const response = await axisRequest({
-        url,
-        method: 'POST',
-        headers,
-        data: encryptedAndSigned
-    });
+    url,
+    method: 'POST',
+    headers,
+    data: encryptedAndSigned
+  });
 
   const decrypted = await jweVerifyAndDecrypt(response.data);
   return { raw: response.data, decrypted };
 }
 
 module.exports = {
-  getBalance
+  beneEnquiry
 };

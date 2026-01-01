@@ -1,12 +1,17 @@
 module.exports = {
   env: 'UAT', // or 'PROD'
 
+  // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payee-mgmt/beneficiary-registration
+
   urls: {
     UAT: {
+      getBalance:      'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-balance',
+      beneReg:         'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payee-mgmt/beneficiary-registration', // POST
+      beneEnquiry:     'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payee-mgmt/beneficiary-enquiry', // POST
       transferPayment: 'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment',
       getStatus:       'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-status',
-      getBalance:      'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-balance'
     },
+
     PROD: {
       transferPayment: 'https://saksham.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment',
       getStatus:       'https://saksham.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-status',
