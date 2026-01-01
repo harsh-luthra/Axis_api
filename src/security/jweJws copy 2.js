@@ -1,6 +1,4 @@
 // src/security/jweJws.js
-const fs = require('fs');
-const path = require('path');
 const {
   CompactEncrypt,
   CompactSign,
@@ -9,39 +7,17 @@ const {
   importSPKI
 } = require('jose');
 const { TextEncoder, TextDecoder } = require('util');
+const { loadKeys } = require('./p12');
 
 let cache = null;
 
 async function loadJoseKeys() {
   if (cache) return cache;
-
-  // Load your own private key PEM directly
-  const rawPrivatePem = fs.readFileSync(
-    path.resolve(__dirname, '../../certs/client_private.key'),
-    'utf8'
-  );
-
-  // If it's PKCS#1 (BEGIN RSA PRIVATE KEY), convert to PKCS#8 using node:crypto
-  let privateKeyPemPkcs8 = rawPrivatePem;
-  if (rawPrivatePem.includes('BEGIN RSA PRIVATE KEY')) {
-    const { createPrivateKey } = require('crypto');
-    const keyObj = createPrivateKey(rawPrivatePem);
-    privateKeyPemPkcs8 = keyObj
-      .export({ format: 'pem', type: 'pkcs8' })
-      .toString();
-  }
-
-  // Axis public cert -> public key for encryption/verify
-  const axisCertPem = fs.readFileSync(
-    path.resolve(__dirname, '../../certs/axis-uat-cert.pem'),
-    'utf8'
-  );
-  const { X509Certificate } = require('crypto');
-  const axisX509 = new X509Certificate(axisCertPem);
-  const axisPublicKeyPem = axisX509.publicKey.export({ type: 'spki', format: 'pem' });
+  const { privateKeyPemPkcs8, axisPublicKeyPem } = loadKeys(); // from your P12 loader
 
   const privateKeyForSign = await importPKCS8(privateKeyPemPkcs8, 'RS256');
   const privateKeyForDecrypt = await importPKCS8(privateKeyPemPkcs8, 'RSA-OAEP-256');
+
   const publicKeyForEncrypt = await importSPKI(axisPublicKeyPem, 'RSA-OAEP-256');
   const publicKeyForVerify = await importSPKI(axisPublicKeyPem, 'RS256');
 
@@ -49,32 +25,37 @@ async function loadJoseKeys() {
   return cache;
 }
 
-const enc = new TextEncoder();
-const dec = new TextDecoder();
-
+// ---- THIS is the function you asked for ----
 async function jweEncryptAndSign(payloadObj) {
   const { privateKeyForSign, publicKeyForEncrypt } = await loadJoseKeys();
+  const enc = new TextEncoder();
+
   const payloadJson = JSON.stringify(payloadObj);
 
-  // JWE encrypt
+  // 1) JWE encrypt JSON (RSA-OAEP-256 + A256GCM)[file:2]
   const jweCompact = await new CompactEncrypt(enc.encode(payloadJson))
     .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
     .encrypt(publicKeyForEncrypt);
 
-  // JWS sign JWE string
+  // 2) JWS sign over the JWE compact string (raw text payload)[file:2]
   const jwsCompact = await new CompactSign(enc.encode(jweCompact))
     .setProtectedHeader({ alg: 'RS256' })
     .sign(privateKeyForSign);
 
+  // This compact JWS string is what you send as HTTP body
   return jwsCompact;
 }
 
+// Optional: verify + decrypt Axis responses
 async function jweVerifyAndDecrypt(jwsCompact) {
   const { privateKeyForDecrypt, publicKeyForVerify } = await loadJoseKeys();
+  const dec = new TextDecoder();
 
+  // 1) verify JWS
   const { payload } = await compactVerify(jwsCompact, publicKeyForVerify);
-  const jweCompact = dec.decode(payload);
+  const jweCompact = dec.decode(payload); // JWS payload is JWE string[file:2]
 
+  // 2) decrypt JWE
   const { decryptCompact } = await import('jose');
   const decrypted = await decryptCompact(jweCompact, privateKeyForDecrypt);
   return JSON.parse(dec.decode(decrypted.plaintext));
