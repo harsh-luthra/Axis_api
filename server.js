@@ -68,10 +68,7 @@ function buildGetBalanceData(corpAccNum) {
 
 // --------- TEST BALANCE ENDPOINT ----------
 app.get('/test-balance', async (req, res) => {
-  const corpAccNum =
-    req.query.acc ||
-    process.env.AXIS_TEST_CORP_ACC ||
-    '918010009499978';
+  const corpAccNum = '309010100067740';
 
   try {
     const url = config.urls[config.env].getBalance;
