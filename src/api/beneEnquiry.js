@@ -6,10 +6,10 @@ const { generateChecksumAxis } = require('../security/checksumAxis');
 const { axisRequest } = require('../http/axisHttp');
 
 function baseHeaders() {
-  const nowMillis = Date.now().toString();
+  const now = Date.now().toString();
   return {
     'Content-Type': 'text/plain',
-    'x-fapi-epoch-millis': nowMillis,
+    'x-fapi-epoch-millis': now,
     'x-fapi-channel-id': config.channelId,
     'x-fapi-uuid': uuidv4(),
     'x-fapi-serviceId': config.headersBase['x-fapi-serviceId'],

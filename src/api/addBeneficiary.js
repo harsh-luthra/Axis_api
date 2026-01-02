@@ -1,5 +1,4 @@
 // src/api/addBeneficiary.js
-const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
@@ -19,29 +18,6 @@ function baseHeaders() {
     'X-IBM-Client-Secret': config.clientSecret
   };
 }
-
-// function buildAddBeneficiaryData(beneDetails) {
-//   const data = {
-//     channelId: config.channelId,
-//     corpCode: config.corpCode,
-//     userId: "DEMOCORP159_USER1", // Your system user
-//     beneinsert: [{
-//       apiVersion: "1.0",
-//       beneCode: beneDetails.beneCode || `KITE_${Date.now()}`,
-//       beneName: beneDetails.beneName,
-//       beneAccNum: beneDetails.beneAccNum,
-//       beneIfscCode: beneDetails.beneIfscCode,
-//       beneAcType: beneDetails.beneAcType || "10",
-//       beneBankName: beneDetails.beneBankName || "",
-//       beneEmailAddr1: beneDetails.beneEmailAddr1 || "",
-//       beneMobileNo: beneDetails.beneMobileNo || "",
-//       checksum: '' // Will be calculated
-//     }]
-//   };
-  
-//   data.checksum = generateChecksumAxis(data);
-//   return { Data: data };
-// }
 
 function buildAddBeneficiaryData(beneDetails) {
   const beneItem = {
