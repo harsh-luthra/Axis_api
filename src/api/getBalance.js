@@ -3,12 +3,9 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
-// const { generateChecksum } = require('../security/checksum');
 const { generateChecksumAxis } = require('../security/checksumAxis');
-
 const { axisRequest } = require('../http/axisHttp');
 
-// --------- HELPERS FOR GET BALANCE ----------
 function baseHeaders() {
   const now = Date.now().toString();
   return {
