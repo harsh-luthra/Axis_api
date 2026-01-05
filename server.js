@@ -179,9 +179,9 @@ app.post('/fund-transfer', async (req, res) => {
     =========================== */
 
         // ✅ SAVE TO DB (right name!)
-    await db.createFundTransfer(merchantId, payload, axisResult);
+    // await db.createFundTransfer(merchantId, payload, axisResult);
     
-    console.log(`💾 Payout saved ID: ${payoutId}`);
+    // console.log(`💾 Payout saved ID: ${payoutId}`);
 
     return res.status(200).json({
       success: true,

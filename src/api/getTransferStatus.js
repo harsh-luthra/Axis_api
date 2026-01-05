@@ -42,7 +42,8 @@ function buildStatusData(req) {
   const Data = {
     channelId: config.channelId,
     corpCode: config.corpCode,
-    custUniqRef: req.custUniqRef
+    custUniqRef: req.custUniqRef,
+    crn: req.crn || undefined
   };
 
   Data.checksum = generateChecksumAxis(Data);
