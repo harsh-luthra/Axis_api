@@ -117,97 +117,45 @@ app.get('/balance/:merchantId', async (req, res) => {
   try {
     const merchantId = parseInt(req.params.merchantId) || 1;  // Default 1
     // const result = await require('./src/api/getBalance').getBalance(merchantId);
-    const result = getBalance();
-    
+    const result = await getBalance();
+    // console.log(result);
     // Latest snapshot
     const latest = await db.getLatestBalance(merchantId);
     
     res.json({
       success: true,
-      merchantId,
+      // merchantId,
       axisBalance: result.decrypted?.Data?.data?.Balance,
-      appPending: latest?.app_pending_out || 0,
-      reconciled: latest?.reconciled || false,
+      // appPending: latest?.app_pending_out || 0,
+      // reconciled: latest?.reconciled || false,
       fetchedAt: latest?.fetched_at,
-      snapshotId: latest?.id
+      // snapshotId: latest?.id
     });
+
+    // res.json({
+    //   success: true,
+    //   merchantId,
+    //   axisBalance: result.decrypted?.Data?.data?.Balance,
+    //   appPending: latest?.app_pending_out || 0,
+    //   reconciled: latest?.reconciled || false,
+    //   fetchedAt: latest?.fetched_at,
+    //   snapshotId: latest?.id
+    // });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get Balance
-app.get('/test-balance', async (req, res) => {
-  const corpAccNum = '309010100067740';
-
-  try {
-    const url = config.urls[config.env].getBalance;
-    const headers = buildHeaders();
-    const body = buildGetBalanceData(corpAccNum);
-
-    const jwsPayload = await jweEncryptAndSign(body);
-
-    const axisResp = await axisRequest({
-      method: 'POST',
-      url,
-      headers,
-      data: jwsPayload
-    });
-
-    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
-    const root = decrypted.Data || decrypted.data || decrypted;
-
-    res.json({
-      rawAxisStatus: axisResp.status,
-      decrypted
-      // you can also expose root.data if you want only inner fields
-    });
-  } catch (err) {
-    const status = err.response?.status || 500;
-    res.status(status).json({
-      error: true,
-      message: err.message,
-      axisStatus: err.response?.status,
-      axisData: err.response?.data
-    });
-  }
-});
-
-// /test-add-beneficiary
-app.post('/test-add-beneficiary', async (req, res) => {
-  try {
-    console.log('🔍 Testing Add Beneficiary API...', req.body);
-    const result = await require('./src/api/addBeneficiary').addBeneficiary(req.body);
-    
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      rawAxisStatus: result.raw ? 200 : 'Error',
-      rawResponse: result.raw,
-      decrypted: result.decrypted,
-      beneCode: result.decrypted?.Data?.data?.beneDetails?.beneCode || 'N/A',
-      status: result.decrypted?.Data?.status || 'N/A'
-    });
-  } catch (error) {
-    console.error('❌ Add Beneficiary API Error:', error.message);
-    res.status(error.response?.status || 500).json({
-      success: false,
-      error: error.message,
-      axisStatus: error.response?.status || 500,
-      axisData: error.response?.data || error.axisData,
-      requestBody: req.body  // Debug input
-    });
-  }
-});
 
 // /test-transfer-payment
 app.post('/fund-transfer', async (req, res) => {
   try {
+    const merchantId = 1;  // TODO: From auth middleware req.merchant.id
     const payload = req.body;
 
     console.log('💸 Fund Transfer Request:', JSON.stringify(payload, null, 2));
 
-    const result = await fundTransfer(payload);
+    const result = await fundTransfer(payload, merchantId);
 
     const decrypted = result?.decrypted || {};
     const data = decrypted?.Data || {};
@@ -237,7 +185,8 @@ app.post('/fund-transfer', async (req, res) => {
       success: true,
       axisStatus: data.status || 'S',
       axisMessage: data.message || 'Transfer initiated successfully',
-      referenceId: data.txnReferenceId || null,
+      crn: payload.custUniqRef,  // Client polls /status with this
+      axisRef: data.txnReferenceId || null,
       utr: data.utr || null,
       raw: result.raw,
       decrypted
@@ -345,6 +294,72 @@ app.post('/fund-transfer/status', async (req, res) => {
     });
   }
 });
+
+
+// Get Balance
+app.get('/test-balance', async (req, res) => {
+  const corpAccNum = '309010100067740';
+
+  try {
+    const url = config.urls[config.env].getBalance;
+    const headers = buildHeaders();
+    const body = buildGetBalanceData(corpAccNum);
+
+    const jwsPayload = await jweEncryptAndSign(body);
+
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    const root = decrypted.Data || decrypted.data || decrypted;
+
+    res.json({
+      rawAxisStatus: axisResp.status,
+      decrypted
+      // you can also expose root.data if you want only inner fields
+    });
+  } catch (err) {
+    const status = err.response?.status || 500;
+    res.status(status).json({
+      error: true,
+      message: err.message,
+      axisStatus: err.response?.status,
+      axisData: err.response?.data
+    });
+  }
+});
+
+// /test-add-beneficiary
+app.post('/test-add-beneficiary', async (req, res) => {
+  try {
+    console.log('🔍 Testing Add Beneficiary API...', req.body);
+    const result = await require('./src/api/addBeneficiary').addBeneficiary(req.body);
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      rawAxisStatus: result.raw ? 200 : 'Error',
+      rawResponse: result.raw,
+      decrypted: result.decrypted,
+      beneCode: result.decrypted?.Data?.data?.beneDetails?.beneCode || 'N/A',
+      status: result.decrypted?.Data?.status || 'N/A'
+    });
+  } catch (error) {
+    console.error('❌ Add Beneficiary API Error:', error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.message,
+      axisStatus: error.response?.status || 500,
+      axisData: error.response?.data || error.axisData,
+      requestBody: req.body  // Debug input
+    });
+  }
+});
+
 
 // --------- ERROR HANDLER ----------
 

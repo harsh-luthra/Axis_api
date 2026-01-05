@@ -2,31 +2,63 @@ const pool = require('./mysql');
 const config = require('../config/axisConfig');
 const crypto = require('crypto');
 
-async function createPayoutTransfer(payload, axisResponse) {
+// async function createPayoutTransfer(payload, axisResponse) {
+//   const [result] = await pool.execute(`
+//     INSERT INTO payout_requests (
+//       merchant_id, crn, idempotency_key, txn_paymode, txn_type, txn_amount, 
+//       bene_ifsc_code, bene_acc_num, value_date, bene_name, corp_acc_num,
+//       checksum_sent, axis_txn_ref, axis_response, status
+//     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+//   `, [
+//     payload.merchant_id || 1,
+//     payload.custUniqRef,  // CRN - golden key
+//     payload.idempotency_key || crypto.randomUUID(),
+//     payload.txnPaymode,
+//     payload.txnType || 'CUST',
+//     payload.txnAmount,
+//     payload.beneIfscCode,
+//     payload.beneAccNum,
+//     payload.valueDate,
+//     payload.beneName,
+//     payload.corpAccNum,
+//     payload.checksum,
+//     axisResponse?.data?.txnReferenceId,
+//     JSON.stringify(axisResponse),
+//     axisResponse?.data?.status === 'S' ? 'processing' : 'failed'
+//   ]);
+  
+//   return result.insertId;
+// }
+
+async function createFundTransfer(merchantId, ftDetails, axisResponse) {
+  const paymentDetails = ftDetails.paymentDetails?.[0] || ftDetails;  // Handle both
+  
   const [result] = await pool.execute(`
     INSERT INTO payout_requests (
-      merchant_id, crn, idempotency_key, txn_paymode, txn_type, txn_amount, 
-      bene_ifsc_code, bene_acc_num, value_date, bene_name, corp_acc_num,
-      checksum_sent, axis_txn_ref, axis_response, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      merchant_id, crn, idempotency_key, txn_paymode, txn_type, txn_amount,
+      bene_lei, corp_acc_num, bene_code, value_date, bene_name, bene_acc_num,
+      bene_ifsc_code, bene_bank_name, checksum_sent, axis_response, status
+    ) VALUES (?, ?, UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
-    payload.merchant_id || 1,
-    payload.custUniqRef,  // CRN - golden key
-    payload.idempotency_key || crypto.randomUUID(),
-    payload.txnPaymode,
-    payload.txnType || 'CUST',
-    payload.txnAmount,
-    payload.beneIfscCode,
-    payload.beneAccNum,
-    payload.valueDate,
-    payload.beneName,
-    payload.corpAccNum,
-    payload.checksum,
-    axisResponse?.data?.txnReferenceId,
+    merchantId,
+    paymentDetails.custUniqRef,  // ✅ CRN (key field)
+    paymentDetails.txnPaymode,
+    paymentDetails.txnType,
+    paymentDetails.txnAmount,
+    paymentDetails.beneLEI,
+    paymentDetails.corpAccNum,
+    paymentDetails.beneCode,
+    paymentDetails.valueDate,
+    paymentDetails.beneName,
+    paymentDetails.beneAccNum,
+    paymentDetails.beneIfscCode,
+    paymentDetails.beneBankName,
+    paymentDetails.checksum,
     JSON.stringify(axisResponse),
-    axisResponse?.data?.status === 'S' ? 'processing' : 'failed'
+    axisResponse.decrypted?.Data?.status === 'S' ? 'processing' : 'failed'
   ]);
   
+  console.log(`💾 Transfer saved: ID ${result.insertId}, CRN ${paymentDetails.custUniqRef}`);
   return result.insertId;
 }
 
@@ -97,6 +129,7 @@ async function handleCallback(payload) {
   ]);
 }
 
+// Using
 async function getMerchantBalance(merchantId) {
   const [rows] = await pool.execute(`
     SELECT 
@@ -112,6 +145,7 @@ async function getMerchantBalance(merchantId) {
   return rows[0] || { app_balance: 0, pending_payouts: 0, axis_balance: 0 };
 }
 
+// Using
 async function saveBalanceSnapshot(merchantId, corpAccNum, axisData) {
   const balanceData = axisData?.Data?.data || axisData?.data || {};
   

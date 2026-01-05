@@ -4,6 +4,7 @@ const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
 const { generateChecksumAxis } = require('../security/checksumAxis');
 const { axisRequest } = require('../http/axisHttp');
+const db = require('../db/payouts');  // ✅ NEW
 
 function baseHeaders() {
   const now = Date.now().toString();
@@ -170,26 +171,45 @@ function buildFundTransferData(ft) {
   };
 }
 
+// async function fundTransfer(ftDetails, merchantId) {
+//   const url = config.urls[config.env].transferPayment; // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment
+//   console.log('🔍 TransferPayment URL:', url);
+//   const headers = baseHeaders();
+//   const body = buildFundTransferData(ftDetails);
 
-async function fundTransfer(ftDetails) {
-  const url = config.urls[config.env].transferPayment; // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment
-  console.log('🔍 TransferPayment URL:', url);
+//   console.log('🔍 TransferPayment Data:', JSON.stringify(body, null, 2));
+
+//   const encryptedAndSigned = await jweEncryptAndSign(body);
+
+//   const response = await axisRequest({
+//     url,
+//     method: 'POST',
+//     headers,
+//     data: encryptedAndSigned
+//   });
+
+//   // ✅ NEW: Save to DB
+//   await db.createFundTransfer(merchantId, ftDetails, { raw: response.data, decrypted });
+
+//   const decrypted = await jweVerifyAndDecrypt(response.data);
+//   return { raw: response.data, decrypted };
+// }
+
+async function fundTransfer(ftDetails, merchantId) {  // ✅ Add merchantId param
+  const url = config.urls[config.env].transferPayment;
   const headers = baseHeaders();
   const body = buildFundTransferData(ftDetails);
-
-  console.log('🔍 TransferPayment Data:', JSON.stringify(body, null, 2));
-
+  
+  console.log('🔍 TransferPayment Data:', JSON.stringify(body.Data, null, 2));
+  
   const encryptedAndSigned = await jweEncryptAndSign(body);
-
-  const response = await axisRequest({
-    url,
-    method: 'POST',
-    headers,
-    data: encryptedAndSigned
-  });
-
+  const response = await axisRequest({ url, method: 'POST', headers, data: encryptedAndSigned });
   const decrypted = await jweVerifyAndDecrypt(response.data);
-  return { raw: response.data, decrypted };
+  
+  // ✅ NEW: Save to DB
+  await db.createFundTransfer(merchantId, ftDetails, { raw: response.data, decrypted });
+  
+  return { raw: response.data, decrypted, merchantId };
 }
 
 module.exports = { fundTransfer };
