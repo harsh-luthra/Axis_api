@@ -15,6 +15,7 @@ const { getBalance } = require('./src/api/getBalance.js');
 const crypto = require('crypto');
 
 const { fundTransfer } = require('./src/api/transferPayment');
+const { getTransferStatus } = require('./src/api/getTransferStatus');
 
 const app = express();
 
@@ -267,6 +268,67 @@ app.post('/fund-transfer', async (req, res) => {
   }
 });
 
+app.post('/fund-transfer/status', async (req, res) => {
+  try {
+    console.log('📡 Get Transfer Status Request:', req.body);
+
+    const result = await getTransferStatus(req.body);
+
+    const decrypted = result?.decrypted || {};
+    const data = decrypted?.Data || {};
+
+    /* ===========================
+       AXIS BUSINESS FAILURE
+    =========================== */
+    if (data.status && data.status !== 'S') {
+      return res.status(422).json({
+        success: false,
+        axisStatus: data.status,
+        axisMessage: data.message || 'Axis rejected status enquiry',
+        decrypted
+      });
+    }
+
+    /* ===========================
+       SUCCESS
+    =========================== */
+    res.status(200).json({
+      success: true,
+      axisStatus: data.status,
+      axisMessage: data.message,
+      txnStatus: data.txnStatus || null,
+      utr: data.utr || null,
+      txnReferenceId: data.txnReferenceId || null,
+      decrypted,
+      raw: result.raw
+    });
+
+  } catch (error) {
+    console.error('❌ Get Status Error:', error);
+
+    if (error.message?.startsWith('Axis Status Validation Failed')) {
+      return res.status(400).json({
+        success: false,
+        errorType: 'VALIDATION_ERROR',
+        message: error.message
+      });
+    }
+
+    if (error.response) {
+      return res.status(error.response.status || 502).json({
+        success: false,
+        errorType: 'AXIS_HTTP_ERROR',
+        axisRaw: error.response.data
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      errorType: 'INTERNAL_ERROR',
+      message: error.message
+    });
+  }
+});
 
 // --------- ERROR HANDLER ----------
 
