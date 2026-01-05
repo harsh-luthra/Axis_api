@@ -36,14 +36,32 @@ function validateStatusRequest(req) {
 /* ===========================
    BUILD PAYLOAD
 =========================== */
+// function buildStatusData(req) {
+//   validateStatusRequest(req);
+
+//   const Data = {
+//     channelId: config.channelId,
+//     corpCode: config.corpCode,
+//     custUniqRef: req.custUniqRef,
+//     crn: req.crn || undefined
+//   };
+
+//   Data.checksum = generateChecksumAxis(Data);
+
+//   return {
+//     Data,
+//     Risk: {}
+//   };
+// }
+
 function buildStatusData(req) {
   validateStatusRequest(req);
 
   const Data = {
-    channelId: config.channelId,
-    corpCode: config.corpCode,
-    custUniqRef: req.custUniqRef,
-    crn: req.crn || undefined
+    channelId: config.channelId,        // "ELEVENPAY" or "TXB"
+    corpCode: config.corpCode,          // "DEMOCORP159"
+    crn: [req.crn],                     // ✅ ARRAY! ["FTTEST123456"]
+    // custUniqRef: req.custUniqRef     // ❌ Remove (use crn)
   };
 
   Data.checksum = generateChecksumAxis(Data);

@@ -236,7 +236,7 @@ app.post('/fund-transfer/status', async (req, res) => {
     console.log('📡 Get Transfer Status Request:', req.body);
 
     const result = await getTransferStatus(req.body);
-
+    console.log('📡 Get Transfer Status Result:', JSON.stringify(result, null, 2));
     const decrypted = result?.decrypted || {};
     const data = decrypted?.Data || {};
 

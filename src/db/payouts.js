@@ -85,43 +85,53 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
 }
 
 
-
-
 async function updatePayoutStatus(crn, statusData) {
+  const safeNull = (val) => val === '' || val == null ? null : val;
+  
+  // ✅ 11 columns EXACT match
   const [result] = await pool.execute(`
     INSERT INTO payout_status_events (
-      payout_id, crn, utr_no, transaction_status, status_description,
-      respone_code, batch_no, processing_date, raw_response
+      payout_id, corp_code, crn, utr_no, transaction_status, 
+      status_description, batch_no, processing_date, respone_code, 
+      checksum_received, raw_response
     ) VALUES (
-      (SELECT id FROM payout_requests WHERE crn = ?), ?, ?, ?, ?, ?, ?, ?, ?
+      (SELECT id FROM payout_requests WHERE crn = ?), 
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     ) ON DUPLICATE KEY UPDATE 
-    updated_at = CURRENT_TIMESTAMP
+      raw_response = VALUES(raw_response),
+      timestamp = CURRENT_TIMESTAMP
   `, [
-    crn,
-    crn,
-    statusData.utrNo,
-    statusData.transactionStatus,
-    statusData.statusDescription,
-    statusData.responeCode,
-    statusData.batchNo,
-    statusData.processingDate,
-    JSON.stringify(statusData)
+    crn,                                    // payout_id subquery
+    config.corpCode,                        // corp_code ✅
+    crn,                                    // crn
+    safeNull(statusData.utrNo),             // utr_no
+    parseInt(statusData.transactionStatus) || 1,  // transaction_status tinyint
+    safeNull(statusData.statusDescription), // status_description
+    safeNull(statusData.batchNo),           // batch_no
+    safeNull(statusData.processingDate),    // processing_date
+    safeNull(statusData.responeCode),       // respone_code
+    safeNull(statusData.checksum),          // checksum_received ✅
+    JSON.stringify(statusData)              // raw_response
   ]);
   
-  // Update main request status
+  // Update main payout status
+  const txnStatus = parseInt(statusData.transactionStatus) || 1;
   await pool.execute(`
-    UPDATE payout_requests 
-    SET status = CASE 
-      WHEN ? = 3 THEN 'success'
-      WHEN ? = 4 THEN 'return' 
-      WHEN ? = 2 THEN 'failed'
-      ELSE 'processing'
-    END, updated_at = CURRENT_TIMESTAMP
+    UPDATE payout_requests SET 
+      status = CASE 
+        WHEN ? = 3 THEN 'success'
+        WHEN ? = 4 THEN 'return'
+        WHEN ? = 2 THEN 'failed'
+        ELSE 'processing'
+      END, 
+      updated_at = CURRENT_TIMESTAMP
     WHERE crn = ?
-  `, [statusData.transactionStatus, statusData.transactionStatus, statusData.transactionStatus, crn]);
+  `, [txnStatus, txnStatus, txnStatus, crn]);
   
+  console.log(`📊 Status saved: ${crn} → ${statusData.transactionStatus}`);
   return result;
 }
+
 
 async function handleCallback(payload) {
   // Match by crn/transaction_id
