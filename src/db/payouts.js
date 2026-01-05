@@ -145,10 +145,10 @@ async function updatePayoutStatus(crn, axisResponse) {
   await pool.execute(`
     UPDATE payout_requests SET 
       status = CASE 
-        WHEN ? = 3 THEN 'success'
+        WHEN ? = 3 THEN 'processed'
         WHEN ? = 4 THEN 'return'
-        WHEN ? = 2 THEN 'failed'
-        ELSE 'processing'
+        WHEN ? = 2 THEN 'rejected'
+        ELSE 'pending'
       END, updated_at = CURRENT_TIMESTAMP
     WHERE crn = ?
   `, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
