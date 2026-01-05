@@ -14,6 +14,8 @@ const { getBalance } = require('./src/api/getBalance.js');
 
 const crypto = require('crypto');
 
+const { fundTransfer } = require('../src/api/transferPayment');
+
 const app = express();
 
 app.use(bodyParser.json());
@@ -189,136 +191,84 @@ app.post('/test-bene-enquiry', async (req, res) => {
 });
 
 
-// // Add Beneficiary
-// app.post('/test-add-beneficiary', async (req, res) => {
-//   const payload = {
-//     Data: {
-//       channelId: "KITEPAY",
-//       corpCode: "DEMOCORP159",
-//       userId: "kitepay_user",
-//       beneinsert: [{
-//         apiVersion: "1.0",
-//         beneCode: `KITE_${Date.now()}`,
-//         beneName: "KitePay Test Merchant", 
-//         beneAccNum: "5230330001915",
-//         beneIfscCode: "HDFC0000523",
-//         checksum: "e326c1ca326533f55d0aa93c1caffde30769a715" // Calculate real checksum
-//       }]
-//     }
-//   };
+// /test-transfer-payment
+router.post('/fund-transfer', async (req, res) => {
+  try {
+    const payload = req.body;
 
-//   try {
-//     const url = config.urls[config.env].beneReg;
-//     const headers = buildHeaders();
-//     const jwsPayload = await jweEncryptAndSign(payload);
+    console.log('💸 Fund Transfer Request:', JSON.stringify(payload, null, 2));
 
-//     const axisResp = await axisRequest({ method: 'POST', url, headers, data: jwsPayload });
-//     const decrypted = await jweVerifyAndDecrypt(axisResp.data);
-    
-//     res.json({ rawAxisStatus: axisResp.status, decrypted });
-//   } catch (err) {
-//     handleAxisError(err, res);
-//   }
-// });
+    const result = await fundTransfer(payload);
 
-// // Beneficiary Enquiry
-// app.post('/test-bene-enquiry', async (req, res) => {
-//   const payload = {
-//     Data: {
-//       channelId: "KITEPAY",
-//       corpCode: "DEMOCORP159",
-//       beneCode: "KITE_1735792080000",
-//       status: "All",
-//       emailId: "dev@kitepay.in",
-//       checksum: "2cd88677a293aba12210a9563c93d808"
-//     }
-//   };
+    const decrypted = result?.decrypted || {};
+    const data = decrypted?.Data || {};
 
-//   try {
-//     const url = config.urls[config.env].beneEnquiry;
-//     const headers = buildHeaders();
-//     const jwsPayload = await jweEncryptAndSign(payload);
+    /* ===========================
+       AXIS BUSINESS FAILURE
+    =========================== */
+    if (data.status && data.status !== 'S') {
+      return res.status(422).json({
+        success: false,
+        axisStatus: data.status,
+        axisMessage: data.message || 'Transaction rejected by Axis',
+        axisErrors: data.errorDetails || [],
+        raw: result.raw,
+        decrypted
+      });
+    }
 
-//     const axisResp = await axisRequest({ method: 'POST', url, headers, data: jwsPayload });
-//     const decrypted = await jweVerifyAndDecrypt(axisResp.data);
-    
-//     res.json({ rawAxisStatus: axisResp.status, decrypted });
-//   } catch (err) {
-//     handleAxisError(err, res);
-//   }
-// });
+    /* ===========================
+       SUCCESS
+    =========================== */
+    return res.status(200).json({
+      success: true,
+      axisStatus: data.status || 'S',
+      axisMessage: data.message || 'Transfer initiated successfully',
+      referenceId: data.txnReferenceId || null,
+      utr: data.utr || null,
+      raw: result.raw,
+      decrypted
+    });
 
-// // Fund Transfer
-// app.post('/test-fund-transfer', async (req, res) => {
-//   const payload = {
-//     corpCode: "DEMOCORP159",
-//     channelId: "KITEPAY",
-//     txnRefNo: `KITE-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-//     beneficiary: {
-//       accNum: "987654321098",  // Test beneficiary
-//       ifsc: "AXIS0000002",
-//       name: "KitePay Merchant Test"
-//     },
-//     amount: "1000.00",
-//     remarks: "KitePay UAT Test Transfer"
-//   };
+  } catch (error) {
+    console.error('❌ Fund Transfer Error:', error);
 
-//   try {
-//     const url = config.urls[config.env].transferPayment;
-//     const headers = buildHeaders();
-//     const jwsPayload = await jweEncryptAndSign(payload);
+    /* ===========================
+       VALIDATION ERROR
+    =========================== */
+    if (error.message?.startsWith('Axis Transfer Validation Failed')) {
+      return res.status(400).json({
+        success: false,
+        errorType: 'VALIDATION_ERROR',
+        message: error.message
+      });
+    }
 
-//     const axisResp = await axisRequest({
-//       method: 'POST',
-//       url,
-//       headers,
-//       data: jwsPayload
-//     });
+    /* ===========================
+       AXIS HTTP ERROR
+    =========================== */
+    if (error.response) {
+      return res.status(error.response.status || 502).json({
+        success: false,
+        errorType: 'AXIS_HTTP_ERROR',
+        axisStatusCode: error.response.status,
+        axisRaw: error.response.data || null
+      });
+    }
 
-//     const decrypted = await jweVerifyAndDecrypt(axisResp.data);
-//     res.json({
-//       rawAxisStatus: axisResp.status,
-//       request: payload,
-//       decrypted
-//     });
-//   } catch (err) {
-//     handleAxisError(err, res);
-//   }
-// });
+    /* ===========================
+       ENCRYPTION / INTERNAL ERROR
+    =========================== */
+    return res.status(500).json({
+      success: false,
+      errorType: 'INTERNAL_SERVER_ERROR',
+      message: error.message || 'Unexpected error'
+    });
+  }
+});
 
-// // Get TXN Status
-// app.post('/test-txn-status', async (req, res) => {
-//   const { txnRefNo, bankRefNo } = req.body; // POST body input
-  
-//   const payload = {
-//     corpCode: "DEMOCORP159",
-//     channelId: "KITEPAY",
-//     txnRefNo,
-//     bankRefNo // Optional
-//   };
 
-//   try {
-//     const url = config.urls[config.env].getStatus;
-//     const headers = buildHeaders();
-//     const jwsPayload = await jweEncryptAndSign(payload);
-
-//     const axisResp = await axisRequest({
-//       method: 'POST',
-//       url,
-//       headers,
-//       data: jwsPayload
-//     });
-
-//     const decrypted = await jweVerifyAndDecrypt(axisResp.data);
-//     res.json({
-//       rawAxisStatus: axisResp.status,
-//       request: payload,
-//       decrypted
-//     });
-//   } catch (err) {
-//     handleAxisError(err, res);
-//   }
-// });
+// --------- ERROR HANDLER ----------
 
 function handleAxisError(err, res) {
   const status = err.response?.status || 500;

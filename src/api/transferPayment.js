@@ -1,18 +1,15 @@
-const axios = require('axios');
+// src/api/fundTransfer.js
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config/axisConfig');
-const { jweEncryptAndSign } = require('../security/jweJws');
-const { generateChecksum } = require('../security/checksum');
-
+const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
 const { generateChecksumAxis } = require('../security/checksumAxis');
-
 const { axisRequest } = require('../http/axisHttp');
 
 function baseHeaders() {
-  const nowMillis = Date.now().toString();
+  const now = Date.now().toString();
   return {
     'Content-Type': 'text/plain',
-    'x-fapi-epoch-millis': nowMillis,
+    'x-fapi-epoch-millis': now,
     'x-fapi-channel-id': config.channelId,
     'x-fapi-uuid': uuidv4(),
     'x-fapi-serviceId': config.headersBase['x-fapi-serviceId'],
@@ -22,83 +19,176 @@ function baseHeaders() {
   };
 }
 
-// build Data object as per docs[file:6]
-function buildTransferData(payload) {
-  const data = {
-    channelId: config.channelId,
-    corpCode: config.corpCode,
-    paymentDetails: {
-      txnPaymode: payload.txnPaymode, // 'NE', 'RT', 'FT', etc
-      custUniqRef: payload.custUniqRef,
-      txnType: payload.txnType || 'CUST',
-      txnAmount: payload.txnAmount,
-      beneLEI: payload.beneLEI || '',
-      corpAccNum: payload.corpAccNum,
-      beneCode: payload.beneCode,
-      valueDate: payload.valueDate, // 'YYYY-MM-DD'
-      beneName: payload.beneName,
-      beneAccNum: payload.beneAccNum,
-      beneAcType: payload.beneAcType || '',
-      beneAddr1: payload.beneAddr1 || '',
-      beneAddr2: payload.beneAddr2 || '',
-      beneAddr3: payload.beneAddr3 || '',
-      beneCity: payload.beneCity || '',
-      beneState: payload.beneState || '',
-      benePincode: payload.benePincode || '',
-      beneIfscCode: payload.beneIfscCode || '',
-      beneBankName: payload.beneBankName || '',
-      baseCode: payload.baseCode || '',
-      chequeNumber: payload.chequeNumber || '',
-      chequeDate: payload.chequeDate || '',
-      payableLocation: payload.payableLocation || '',
-      printLocation: payload.printLocation || '',
-      beneEmailAddr1: payload.beneEmailAddr1 || '',
-      beneMobileNo: payload.beneMobileNo || '',
-      productCode: payload.productCode || '',
-      invoiceDetails: payload.invoiceDetails || {},
-      enrichment1: payload.enrichment1 || '',
-      enrichment2: payload.enrichment2 || '',
-      enrichment3: payload.enrichment3 || '',
-      enrichment4: payload.enrichment4 || '',
-      enrichment5: payload.enrichment5 || '',
-      senderToReceiverInfo: payload.senderToReceiverInfo || ''
-    }
+function validateFundTransfer(ft) {
+  const errors = [];
+
+  const isString = v => typeof v === 'string';
+  const isNumberStr = v => /^\d+(\.\d{2})$/.test(v);
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+  const checkLen = (v, max, name) => {
+    if (v && v.length > max) errors.push(`${name} max length ${max}`);
   };
 
-  // Axis checksum is "only attributes within body"; docs show checksum at root Data.[file:6]
-  data.checksum = generateChecksumAxis(data);
-  return { Data: data };
+  /* ===========================
+     1. ENUM VALIDATIONS
+  =========================== */
+
+  const payModes = ['RT', 'NE', 'PA', 'FT', 'CC', 'DD'];
+  if (!payModes.includes(ft.txnPaymode)) {
+    errors.push(`txnPaymode must be one of ${payModes.join(', ')}`);
+  }
+
+  const txnTypes = ['CUST', 'MERC', 'DIST', 'INTN', 'VEND'];
+  if (!txnTypes.includes(ft.txnType)) {
+    errors.push(`txnType must be one of ${txnTypes.join(', ')}`);
+  }
+
+  /* ===========================
+     2. MANDATORY FIELDS
+  =========================== */
+
+  if (!ft.custUniqRef) errors.push('custUniqRef mandatory');
+  if (!ft.txnAmount) errors.push('txnAmount mandatory');
+  if (!ft.corpAccNum) errors.push('corpAccNum mandatory');
+  if (!ft.beneCode) errors.push('beneCode mandatory');
+  if (!ft.valueDate) errors.push('valueDate mandatory');
+  if (!ft.beneName) errors.push('beneName mandatory');
+
+  /* ===========================
+     3. CONDITIONAL MANDATORY
+  =========================== */
+
+  if (['RT', 'NE', 'FT'].includes(ft.txnPaymode) && !ft.beneAccNum) {
+    errors.push('beneAccNum mandatory for RT/NE/FT');
+  }
+
+  if (['RT', 'NE'].includes(ft.txnPaymode) && !ft.beneIfscCode) {
+    errors.push('beneIfscCode mandatory for RT/NE');
+  }
+
+  if (Number(ft.txnAmount) >= 500000000 && !ft.beneLEI) {
+    errors.push('beneLEI mandatory for txn >= 50 Cr');
+  }
+
+  /* ===========================
+     4. TYPE + FORMAT CHECKS
+  =========================== */
+
+  if (!isString(ft.custUniqRef)) errors.push('custUniqRef must be string');
+  if (!isString(ft.beneName)) errors.push('beneName must be string');
+  if (!isString(ft.beneCode)) errors.push('beneCode must be string');
+
+  if (!isNumberStr(ft.txnAmount)) {
+    errors.push('txnAmount must be Number(15,2)');
+  }
+
+  if (!isDate(ft.valueDate)) {
+    errors.push('valueDate must be YYYY-MM-DD');
+  }
+
+  if (ft.beneIfscCode && ft.beneIfscCode.length !== 11) {
+    errors.push('beneIfscCode must be exactly 11 characters');
+  }
+
+  /* ===========================
+     5. LENGTH VALIDATIONS
+  =========================== */
+
+  checkLen(ft.custUniqRef, 30, 'custUniqRef');
+  checkLen(ft.corpAccNum, 15, 'corpAccNum');
+  checkLen(ft.beneCode, 30, 'beneCode');
+  checkLen(ft.beneName, 70, 'beneName');
+  checkLen(ft.beneAccNum, 30, 'beneAccNum');
+  checkLen(ft.beneBankName, 70, 'beneBankName');
+  checkLen(ft.beneEmailAddr1, 250, 'beneEmailAddr1');
+  checkLen(ft.beneMobileNo, 25, 'beneMobileNo');
+
+  /* ===========================
+     6. CHEQUE RULES
+  =========================== */
+
+  if (['CC', 'DD'].includes(ft.txnPaymode)) {
+    if (!ft.baseCode) errors.push('baseCode mandatory for CC/DD');
+    if (!ft.chequeNumber) errors.push('chequeNumber mandatory for CC/DD');
+  }
+
+  /* ===========================
+     FINAL
+  =========================== */
+
+  if (errors.length) {
+    throw new Error(`Axis Transfer Validation Failed: ${errors.join(' | ')}`);
+  }
 }
 
-async function transferPayment(payload) {
-  const url = config.urls[config.env].transferPayment;
+function buildFundTransferData(ft) {
+  validateFundTransfer(ft);
+
+  const payment = {
+    txnPaymode: ft.txnPaymode,
+    custUniqRef: ft.custUniqRef,
+    txnType: ft.txnType || 'CUST',
+    txnAmount: ft.txnAmount,
+    beneLEI: ft.beneLEI || '',
+    corpAccNum: ft.corpAccNum,
+    beneCode: ft.beneCode,
+    valueDate: ft.valueDate || new Date().toISOString().slice(0, 10),
+    beneName: ft.beneName,
+    beneAccNum: ft.beneAccNum || '',
+    beneAcType: ft.beneAcType || '',
+    beneAddr1: ft.beneAddr1 || '',
+    beneAddr2: ft.beneAddr2 || '',
+    beneAddr3: ft.beneAddr3 || '',
+    beneCity: ft.beneCity || '',
+    beneState: ft.beneState || '',
+    benePincode: ft.benePincode || '',
+    beneIfscCode: ft.beneIfscCode || '',
+    beneBankName: ft.beneBankName || '',
+    baseCode: ft.baseCode || '',
+    chequeNumber: ft.chequeNumber || '',
+    chequeDate: ft.chequeDate || '',
+    payableLocation: ft.payableLocation || '',
+    printLocation: ft.printLocation || '',
+    beneEmailAddr1: ft.beneEmailAddr1 || '',
+    beneMobileNo: ft.beneMobileNo || '',
+    productCode: ft.productCode || '',
+    senderToReceiverInfo: ft.senderToReceiverInfo || ''
+  };
+
+  const Data = {
+    channelId: config.channelId,
+    corpCode: config.corpCode,
+    paymentDetails: [payment]
+  };
+
+  Data.checksum = generateChecksumAxis(Data);
+
+  return {
+    Data,
+    Risk: {}
+  };
+}
+
+
+async function fundTransfer(ftDetails) {
+  const url = config.urls[config.env].fundTransfer; // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment
   const headers = baseHeaders();
-  const nonEncryptedBody = buildTransferData(payload);
+  const body = buildFundTransferData(ftDetails);
 
-  // JWE+JWS
-  const encryptedAndSigned = await jweEncryptAndSign(nonEncryptedBody);
+  console.log('🔍 TransferPayment Data:', JSON.stringify(body, null, 2));
 
-  const axiosBody = encryptedAndSigned; // Axis expects compact JWS string as body (per their sample Java/jwe).[file:2][file:6]
+  const encryptedAndSigned = await jweEncryptAndSign(body);
 
-//   const response = await axios.post(url, axiosBody, { headers });
-//   const responseBody = response.data;
+  const response = await axisRequest({
+    url,
+    method: 'POST',
+    headers,
+    data: encryptedAndSigned
+  });
 
-    const response = await axisRequest({
-        url,
-        method: 'POST',
-        headers,
-        data: encryptedAndSigned
-    });
-
-    const responseBody = response.data;
-
-  // If Axis returns encrypted (JWS string), decrypt:
-  // const decrypted = await jweVerifyAndDecrypt(responseBody);
-  // return { raw: responseBody, decrypted };
-
-  return responseBody;
+  const decrypted = await jweVerifyAndDecrypt(response.data);
+  return { raw: response.data, decrypted };
 }
 
-module.exports = {
-  transferPayment
-};
+module.exports = { fundTransfer };
