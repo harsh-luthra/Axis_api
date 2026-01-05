@@ -29,6 +29,7 @@ module.exports = {
   clientSecret: '25a52b58256cc2b3dce279304a2b7f2c',
   channelId: 'ELEVENPAY',
   corpCode: 'DEMOCORP159',
+  corpAccNum: '309010100067740',
 
   // JWE/JWS crypto
   jwe: {

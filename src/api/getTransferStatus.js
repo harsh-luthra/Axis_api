@@ -24,9 +24,10 @@ function baseHeaders() {
 function validateStatusRequest(req) {
   const errors = [];
 
-  if (!req.custUniqRef) errors.push('custUniqRef mandatory');
-  if (typeof req.custUniqRef !== 'string') errors.push('custUniqRef must be string');
-  if (req.custUniqRef?.length > 30) errors.push('custUniqRef max length 30');
+  // ✅ CRN mandatory (PDF spec[file:190])
+  if (!req.crn) errors.push('crn mandatory');
+  if (typeof req.crn !== 'string') errors.push('crn must be string');
+  if (req.crn?.length > 15) errors.push('crn max length 15');  // varchar(15)
 
   if (errors.length) {
     throw new Error(`Axis Status Validation Failed: ${errors.join(' | ')}`);
@@ -36,24 +37,6 @@ function validateStatusRequest(req) {
 /* ===========================
    BUILD PAYLOAD
 =========================== */
-// function buildStatusData(req) {
-//   validateStatusRequest(req);
-
-//   const Data = {
-//     channelId: config.channelId,
-//     corpCode: config.corpCode,
-//     custUniqRef: req.custUniqRef,
-//     crn: req.crn || undefined
-//   };
-
-//   Data.checksum = generateChecksumAxis(Data);
-
-//   return {
-//     Data,
-//     Risk: {}
-//   };
-// }
-
 function buildStatusData(req) {
   validateStatusRequest(req);
 
@@ -61,7 +44,6 @@ function buildStatusData(req) {
     channelId: config.channelId,        // "ELEVENPAY" or "TXB"
     corpCode: config.corpCode,          // "DEMOCORP159"
     crn: [req.crn],                     // ✅ ARRAY! ["FTTEST123456"]
-    // custUniqRef: req.custUniqRef     // ❌ Remove (use crn)
   };
 
   Data.checksum = generateChecksumAxis(Data);
