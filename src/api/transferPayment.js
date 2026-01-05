@@ -172,7 +172,8 @@ function buildFundTransferData(ft) {
 
 
 async function fundTransfer(ftDetails) {
-  const url = config.urls[config.env].fundTransfer; // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment
+  const url = config.urls[config.env].transferPayment; // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment
+  console.log('🔍 TransferPayment URL:', url);
   const headers = baseHeaders();
   const body = buildFundTransferData(ftDetails);
 

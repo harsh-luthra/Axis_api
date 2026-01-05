@@ -14,7 +14,7 @@ const { getBalance } = require('./src/api/getBalance.js');
 
 const crypto = require('crypto');
 
-const { fundTransfer } = require('../src/api/transferPayment');
+const { fundTransfer } = require('./src/api/transferPayment');
 
 const app = express();
 
@@ -192,7 +192,7 @@ app.post('/test-bene-enquiry', async (req, res) => {
 
 
 // /test-transfer-payment
-router.post('/fund-transfer', async (req, res) => {
+app.post('/fund-transfer', async (req, res) => {
   try {
     const payload = req.body;
 
