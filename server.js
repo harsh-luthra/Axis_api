@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 
 const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 const { decryptAes256Callback } = require('./src/security/aesCallback');
-const { decryptAxisCallbackHex } = require('./src/security/axisAes128');
+const { decryptCallback } = require('./src/security/axisAes128');
 // const { decryptHexAes128Ecb } = require('./src/security/axisAes128Ecb');
 
 
@@ -57,6 +57,8 @@ function buildGetBalanceData(corpAccNum) {
 
 // --------- NEW CALLBACK HANDLER ----------
 app.post('/axis/callback', async (req, res) => {
+  console.log('============================');
+  console.log('🔔 Axis Callback Received:', req.body);
   try {
     const encrypted =
       req.body?.GetStatusResponseBodyEncrypted || req.body;
@@ -68,8 +70,10 @@ app.post('/axis/callback', async (req, res) => {
 
     console.log('Encrypted: ', encrypted);
 
-    const decryptedJson = decryptAxisCallbackHex(encrypted);
+    const decryptedJson = decryptCallback(encrypted);
     const parsed = JSON.parse(decryptedJson);
+
+    console.log('Decrypted Callback Payload:', JSON.stringify(parsed, null, 2));
 
     const data = parsed?.data || parsed?.Data || parsed;
 

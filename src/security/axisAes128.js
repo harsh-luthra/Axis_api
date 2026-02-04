@@ -7,35 +7,25 @@ const { callback } = require('../config/axisConfig');
 // const AXIS_CALLBACK_KEY_STRING = process.env.AXIS_CALLBACK_KEY_STRING;
 const AXIS_CALLBACK_KEY_STRING = (callback.aesKeyHex); // Axis shared secret
 
-// Derive AES key: MD5(keyString) -> 16 bytes. [file:106]
-function getAxisAesKey() {
-  if (!AXIS_CALLBACK_KEY_STRING) {
-    throw new Error('AXIS_CALLBACK_KEY_STRING not set');
-  }
-  return crypto.createHash('md5')
-    .update(AXIS_CALLBACK_KEY_STRING, 'utf8')
-    .digest(); // 16‑byte Buffer
-}
+// from bank: key128: 7d320cf27dab0564a8de42f4ca9f00ca
+const KEY_HEX = '7d320cf27dab0564a8de42f4ca9f00ca';
 
-// Fixed IV: 00 01 02 ... 0f. [file:106]
-const AXIS_IV = Buffer.from([
+// fixed IV: 00 01 ... 0f (Axis sample) [file:106]
+const IV = Buffer.from([
   0x00, 0x01, 0x02, 0x03,
   0x04, 0x05, 0x06, 0x07,
   0x08, 0x09, 0x0a, 0x0b,
   0x0c, 0x0d, 0x0e, 0x0f
 ]);
 
-// Decrypt HEX → UTF‑8 JSON string, AES/CBC/PKCS5Padding. [file:106]
-function decryptAxisCallbackHex(hexCipherText) {
-  const key = getAxisAesKey();
+function decryptCallback(cipherTextB64) {
+  const key = Buffer.from(AXIS_CALLBACK_KEY_STRING, 'hex'); // 16‑byte AES‑128 key
+  const cipherBytes = Buffer.from(cipherTextB64, 'base64');
 
-  const cleanHex = hexCipherText.trim();
-  const cipherBuf = Buffer.from(cleanHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-128-cbc', key, IV);
+  decipher.setAutoPadding(true); // PKCS5/PKCS7
 
-  const decipher = crypto.createDecipheriv('aes-128-cbc', key, AXIS_IV);
-  decipher.setAutoPadding(true); // PKCS5/PKCS7 (same as Java default) [web:98]
-
-  let decrypted = decipher.update(cipherBuf, undefined, 'utf8');
+  let decrypted = decipher.update(cipherBytes, undefined, 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
 }
@@ -52,6 +42,6 @@ function encryptAxisCallbackPlain(plaintext) {
 }
 
 module.exports = {
-  decryptAxisCallbackHex,
+  decryptCallback,
   encryptAxisCallbackPlain
 };
