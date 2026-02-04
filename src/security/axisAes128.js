@@ -19,7 +19,7 @@ const IV = Buffer.from([
 ]);
 
 function decryptCallback(cipherTextB64) {
-  const key = Buffer.from(AXIS_CALLBACK_KEY_STRING, 'hex'); // 16‑byte AES‑128 key
+  const key = Buffer.from(KEY_HEX, 'hex'); // 16‑byte AES‑128 key
   const cipherBytes = Buffer.from(cipherTextB64, 'base64');
 
   const decipher = crypto.createDecipheriv('aes-128-cbc', key, IV);
