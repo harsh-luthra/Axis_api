@@ -3,8 +3,8 @@ const bodyParser = require('body-parser');
 
 const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 const { decryptAes256Callback } = require('./src/security/aesCallback');
-const { decryptHexAes128Cbc } = require('./src/security/axisAes128');
-const { decryptHexAes128Ecb } = require('./src/security/axisAes128Ecb');
+const { decryptAxisCallbackHex } = require('./src/security/axisAes128');
+// const { decryptHexAes128Ecb } = require('./src/security/axisAes128Ecb');
 
 
 // NEW: imports for get balance
@@ -66,7 +66,7 @@ app.post('/axis/callback', async (req, res) => {
       return res.status(200).send('OK'); // do NOT fail callback
     }
 
-    const decryptedJson = decryptHexAes128Ecb(encrypted);
+    const decryptedJson = decryptAxisCallbackHex(encrypted);
     const parsed = JSON.parse(decryptedJson);
 
     const data = parsed?.data || parsed?.Data || parsed;

@@ -15,6 +15,12 @@ function getKeyBuffer() {
   return key;
 }
 
+function deriveAxisKeyFromPassphrase(passphrase) {
+  // passphrase is the same string they configured at their side
+  return crypto.createHash('md5').update(passphrase, 'utf8').digest(); // 16 bytes
+}
+
+
 // Decrypt HEX cipher → UTF‑8 string, AES‑128‑ECB/PKCS5/PKCS7
 function decryptHexAes128Ecb(hexCipherText) {
   const key = getKeyBuffer();
