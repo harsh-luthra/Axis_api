@@ -59,30 +59,27 @@ function buildGetBalanceData(corpAccNum) {
 app.post('/axis/callback', async (req, res) => {
   console.log('============================');
   console.log('🔔 Axis Callback Received:', req.body);
+  
   try {
-    const encrypted =
-      req.body?.GetStatusResponseBodyEncrypted || req.body;
-
+    const encrypted = req.body?.GetStatusResponseBodyEncrypted || req.body;
+    
     if (!encrypted) {
       console.error('❌ Missing encrypted payload');
-      return res.status(200).send('OK'); // do NOT fail callback
+      return res.status(200).send('OK');
     }
 
-    console.log('Encrypted: ', encrypted);
+    console.log('🔐 Encrypted:', encrypted);
 
-    const decryptedJson = decryptCallback(encrypted);
+    // decryptCallback() RETURNS OBJECT - NO JSON.parse needed!
+    const decryptedObj = decryptCallback(encrypted);  // ← OBJECT
+    
+    console.log('✅ Decrypted Object:', JSON.stringify(decryptedObj, null, 2));
 
-    console.log('Decrypted Callback Payload:', decryptedJson);
-
-    const parsed = JSON.parse(decryptedJson);
-
-    console.log('Decrypted Callback Payload:', JSON.stringify(parsed, null, 2));
-
-    const data = parsed?.data || parsed?.Data || parsed;
+    const data = decryptedObj?.data || decryptedObj?.Data || decryptedObj;
 
     if (!verifyChecksumAxis(data)) {
       console.error('❌ Axis callback checksum failed');
-      return res.status(200).send('OK'); // Axis retry safe
+      return res.status(200).send('OK');
     }
 
     /* ===========================
@@ -91,11 +88,9 @@ app.post('/axis/callback', async (req, res) => {
     const record = data?.CUR_TXN_ENQ?.[0];
 
     if (!record?.crn) {
-      console.error('❌ CRN missing in callback');
+      console.error('❌ CRN missing');
       return res.status(200).send('OK');
     }
-
-    // res.status(200).send('OK');
 
     const txnUpdate = {
       crn: record.crn,
@@ -107,22 +102,18 @@ app.post('/axis/callback', async (req, res) => {
       processedAt: record.processingDate
     };
 
-    console.log('✅ Axis Callback Received:', txnUpdate);
+    console.log('✅ Processing:', txnUpdate);
 
-    await db.handleCallback(txnUpdate);  // NEW: Persist!
+    await db.handleCallback(txnUpdate);
 
-    // TODO:
-    // 1. Idempotent update using CRN
-    // 2. Ignore duplicates
-    // 3. Persist status transition
-
-    res.status(200).send('OK'); // ALWAYS 200
-
+    res.status(200).send('OK');
+    
   } catch (err) {
-    console.error('❌ Callback Fatal Error:', err);
-    res.status(200).send('OK'); // Never return non-200
+    console.error('❌ Callback Error:', err);
+    res.status(200).send('OK'); // Always 200 for Axis retries
   }
 });
+
 
 // --------- TEST BALANCE ENDPOINT ----------
 app.get('/balance/:merchantId', async (req, res) => {
