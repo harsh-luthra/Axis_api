@@ -37,5 +37,12 @@ const KEY_HEX = '7d320cf27dab0564a8de42f4ca9f00ca';
 const cipherTextB64 = 'jhI5nAdyb1qOEjmcB3JvWnJ+hgOb86uSdQNOWWqCNEeOOSA01VW4ko4q1oxuDd2CUlZb7Tfa1Tu8Zxm9RTUdt9kemqYk9M2cDKe3AGHkkJUirMe+QbwpJosjRB91pEeV2iqNNL/L0MZJpT4agEz+q4UOZW5CZEZV3vxvIdBsYr56kUGBhNcy6S04XYqKmKDhgh+p5Ul8NSblMGHFxAh5OEUo3DSXY0CbhJGjjEQ8ghmX5wTPAB2QHo29MlBwA5NPdwqsxdHuYyRg0KB1vwcUmn1ogxEdhG98GQ5FtF97RqK3fhdwV0qH/TDMOyIwyoFyc3dKh+Hrt4b0LyjBho8XRpd40x7Lm3ebYqd5kdEBes1rQ5n4UwskbDnnLjoADtRL58YHtsaPgQRKwoh+qPi6ABFfyTYgxyDfh9iglnO6SUP+5ZUm1Wm4BwU1WsUTMEjp8ovrBrWz5UmENXzK9si1sM1ZqpjXLSUH3bmc22/n4/hYzxtVPwgq7LmJyKgXhpJAv6KEoWTzS+IDRwJXgeO+NNtyya9JwKZGumeEZfSIGUi3pmLtf3T2LzLiF40KxOKKYRlz5iIDffaEo+CHNVXPuPRIUph+2L83vdM8j29jMcNj1mGMHYyRYw2omWCqtGT/Kzv8dYWaE09uXToLoKcJXa2Qz49w2FGYhuVvcesCNY/NHFipmNSOXasryVUDDuoG2nBeIY0rV5eZhEz3kulbjQD7Mx8dWzlYUFFFCUaR74VYPVB3jBqHOkcFfFlCCqhs61DtHLwf8Yv398yzKMB1Pg==';
 
 // decryptCallback(cipherTextB64);
+    const decryptedJson = decryptCallback(cipherTextB64);
 
-console.log(decryptCallback(cipherTextB64));
+    console.log('Decrypted Callback Payload:', decryptedJson);
+
+    const parsed = JSON.parse(decryptedJson);
+
+    console.log('JSON Callback Payload:', parsed);
+
+

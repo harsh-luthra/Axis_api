@@ -71,6 +71,9 @@ app.post('/axis/callback', async (req, res) => {
     console.log('Encrypted: ', encrypted);
 
     const decryptedJson = decryptCallback(encrypted);
+
+    console.log('Decrypted Callback Payload:', decryptedJson);
+
     const parsed = JSON.parse(decryptedJson);
 
     console.log('Decrypted Callback Payload:', JSON.stringify(parsed, null, 2));
