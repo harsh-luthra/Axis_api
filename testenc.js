@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { callback } = require('./src/config/axisConfig');
 const { decryptCallback } = require('./src/security/axisAes128');
 const { verifyChecksumAxis } = require('./src/security/checksumAxis');
+const db = require('./src/db/payouts');
 
 
 // This MUST be the same key string they configured,
@@ -83,25 +84,25 @@ async function test(encrypted_val) {
       return res.status(200).send('OK');
     }
 
-    // const txnUpdate = {
-    //   crn: record.crn,
-    //   transactionId: record.transaction_id,
-    //   utr: record.utrNo,
-    //   status: record.transactionStatus,
-    //   statusDesc: record.statusDescription,
-    //   amount: record.amount,
-    //   processedAt: record.processingDate
-    // };
+    const txnUpdate = {
+      crn: record.crn,
+      transactionId: record.transaction_id,
+      utr: record.utrNo,
+      status: record.transactionStatus,
+      statusDesc: record.statusDescription,
+      amount: record.amount,
+      processedAt: record.processingDate
+    };
 
-    // console.log('✅ Processing:', txnUpdate);
+    console.log('✅ Processing:', txnUpdate);
 
-    // await db.handleCallback(txnUpdate);
+    await db.handleCallback(txnUpdate);
 
-    res.status(200).send('OK');
+    // res.status(200).send('OK');
     
   } catch (err) {
     console.error('❌ Callback Error:', err);
-    res.status(200).send('OK'); // Always 200 for Axis retries
+    // res.status(200).send('OK'); // Always 200 for Axis retries
   }
 }
 

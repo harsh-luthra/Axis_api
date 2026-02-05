@@ -183,7 +183,7 @@ async function handleCallback(payload) {
     payouts[0].id,
     payload.crn?.trim(),
     payload.transactionId,
-    payload.utrNo,
+    payload.utrNo || null,
     payload.transactionStatus || payload.status,        // ✅ Fallback
     payload.statusDescription,
     payload.responseCode || null,                      // ✅ Explicit NULL
@@ -194,7 +194,6 @@ async function handleCallback(payload) {
   
   console.log('✅ Saved:', payload.crn);
 }
-
 
 
 // Using

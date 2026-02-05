@@ -104,7 +104,6 @@ app.post('/axis/callback', async (req, res) => {
       amount: record.amount
     };
 
-
     console.log('✅ Processing:', txnUpdate);
 
     await db.handleCallback(txnUpdate);
