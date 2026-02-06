@@ -147,6 +147,12 @@ async function updatePayoutStatus(crn, axisResponse) {
     
     // Update main payout
     // ? FIXED - No comments inside SQL
+    console.log('ℹ️  Updating payout_requests:', {
+      crn,
+      txnStatusInt,
+      statusDescription: safeNull(latestStatus.statusDescription)
+    });
+
     await pool.execute(`
       UPDATE payout_requests SET 
         status = CASE 
