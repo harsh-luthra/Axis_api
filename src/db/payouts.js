@@ -86,137 +86,155 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
 
 
 async function updatePayoutStatus(crn, axisResponse) {
-  const safeNull = (val) => val === '' || val == null ? null : val;
-  
-  const parseProcessingDate = (dateStr) => {
-    if (!dateStr) return null;
-    try {
-      const [datePart, timePart] = dateStr.split(' ');
-      const [dd, mm, yyyy] = datePart.split('-');
-      return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')} ${timePart}`;
-    } catch {
+  try {
+    const safeNull = (val) => val === '' || val == null ? null : val;
+    
+    const parseProcessingDate = (dateStr) => {
+      if (!dateStr) return null;
+      try {
+        const [datePart, timePart] = dateStr.split(' ');
+        const [dd, mm, yyyy] = datePart.split('-');
+        return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')} ${timePart}`;
+      } catch {
+        return null;
+      }
+    };
+    
+    // ? String ? Tinyint (PDF spec[file:190])
+    const mapStatusToInt = (statusStr) => {
+      const map = {
+        'PENDING': 1,
+        'REJECTED': 2,
+        'PROCESSED': 3,
+        'Return': 4
+      };
+      return map[statusStr] || 1;
+    };
+    
+    const enqArray = axisResponse.decrypted?.Data?.data?.CUR_TXN_ENQ || [];
+    const latestStatus = enqArray.find(item => item.crn === crn) || enqArray[0];
+    
+    if (!latestStatus) {
+      console.warn('⚠️  No status found for CRN:', crn);
       return null;
     }
-  };
-  
-  // ? String ? Tinyint (PDF spec[file:190])
-  const mapStatusToInt = (statusStr) => {
-    const map = {
-      'PENDING': 1,
-      'REJECTED': 2,
-      'PROCESSED': 3,
-      'Return': 4
-    };
-    return map[statusStr] || 1;
-  };
-  
-  const enqArray = axisResponse.decrypted?.Data?.data?.CUR_TXN_ENQ || [];
-  const latestStatus = enqArray.find(item => item.crn === crn) || enqArray[0];
-  
-  if (!latestStatus) return null;
-  
-  const txnStatusInt = mapStatusToInt(latestStatus.transactionStatus);
-  
-  const [result] = await pool.execute(`
-    INSERT INTO payout_status_events (
-      payout_id, corp_code, crn, utr_no, transaction_status, 
-      status_description, batch_no, processing_date, respone_code, 
-      checksum_received, raw_response
-    ) VALUES (
-      (SELECT id FROM payout_requests WHERE crn = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    ) ON DUPLICATE KEY UPDATE 
-      raw_response = VALUES(raw_response),
-      timestamp = CURRENT_TIMESTAMP
-  `, [
-    crn,
-    latestStatus.corpCode,
-    latestStatus.crn,
-    safeNull(latestStatus.utrNo),
-    txnStatusInt,                          // ? 2 = "REJECTED"
-    safeNull(latestStatus.statusDescription),
-    safeNull(latestStatus.batchNo),
-    parseProcessingDate(latestStatus.processingDate),
-    safeNull(latestStatus.responseCode),
-    safeNull(axisResponse.decrypted?.Data?.data?.checksum),
-    JSON.stringify(axisResponse.decrypted?.Data)
-  ]);
-  
-  // Update main payout
-// ? FIXED - No comments inside SQL
-await pool.execute(`
-  UPDATE payout_requests SET 
-    status = CASE 
-      WHEN ? = 3 THEN 'processed'
-      WHEN ? = 4 THEN 'return'
-      WHEN ? = 2 THEN 'reject'
-      ELSE 'pending'
-    END, 
-    updated_at = CURRENT_TIMESTAMP
-  WHERE crn = ?
-`, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
+    
+    const txnStatusInt = mapStatusToInt(latestStatus.transactionStatus);
+    
+    const [result] = await pool.execute(`
+      INSERT INTO payout_status_events (
+        payout_id, corp_code, crn, utr_no, transaction_status, 
+        status_description, batch_no, processing_date, respone_code, 
+        checksum_received, raw_response
+      ) VALUES (
+        (SELECT id FROM payout_requests WHERE crn = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ) ON DUPLICATE KEY UPDATE 
+        raw_response = VALUES(raw_response),
+        timestamp = CURRENT_TIMESTAMP
+    `, [
+      crn,
+      safeNull(latestStatus.corpCode),
+      safeNull(latestStatus.crn),
+      safeNull(latestStatus.utrNo),
+      txnStatusInt,                          // ? 2 = "REJECTED"
+      safeNull(latestStatus.statusDescription),
+      safeNull(latestStatus.batchNo),
+      parseProcessingDate(latestStatus.processingDate),
+      safeNull(latestStatus.responseCode),
+      safeNull(axisResponse.decrypted?.Data?.data?.checksum),
+      JSON.stringify(axisResponse.decrypted?.Data)
+    ]);
+    
+    // Update main payout
+    // ? FIXED - No comments inside SQL
+    await pool.execute(`
+      UPDATE payout_requests SET 
+        status = CASE 
+          WHEN ? = 3 THEN 'processed'
+          WHEN ? = 4 THEN 'return'
+          WHEN ? = 2 THEN 'reject'
+          ELSE 'pending'
+        END, 
+        updated_at = CURRENT_TIMESTAMP
+      WHERE crn = ?
+    `, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
 
-
-  console.log(`? ${crn} ? ${latestStatus.transactionStatus} (${txnStatusInt})`);
-  return result;
+    console.log(`✅ ${crn} → ${latestStatus.transactionStatus} (${txnStatusInt})`);
+    return result;
+  } catch (err) {
+    console.error('❌ updatePayoutStatus Error for CRN', crn, ':', err.message);
+    throw err;
+  }
 }
 
 
 async function handleCallback(payload) {
-  console.log('🔍 DB payload:', payload);
+  try {
+    console.log('🔍 DB payload:', payload);
 
-  const [payouts] = await pool.execute(
-    'SELECT id FROM payout_requests WHERE crn = ? OR transaction_id = ?',
-    [payload.crn?.trim(), payload.transactionId]
-  );
-  
-  if (payouts.length === 0) {
-    console.log('❌ Orphan:', payload.crn);
-    return;
-  }
-  
-  await pool.execute(`
-    INSERT INTO axis_callbacks (
-      payout_id, crn, transaction_id, utr_no, transaction_status,
-      status_description, response_code, batch_no, amount, raw_payload
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    payouts[0].id,
-    payload.crn?.trim(),
-    payload.transactionId,
-    payload.utrNo || null,
-    payload.transactionStatus || payload.status,        // ✅ Fallback
-    payload.statusDescription,
-    payload.responseCode || null,                      // ✅ Explicit NULL
-    payload.batchNo || null,
-    payload.amount,
-    JSON.stringify(payload)
-  ]);
-  
-  console.log('✅ Saved:', payload.crn);
-  
-  // Update payout status from callback
-  const axisResponse = {
-    decrypted: {
-      Data: {
-        data: {
-          CUR_TXN_ENQ: [{
-            crn: payload.crn?.trim(),
-            transactionStatus: payload.transactionStatus || payload.status,
-            statusDescription: payload.statusDescription,
-            utrNo: payload.utrNo,
-            batchNo: payload.batchNo,
-            responseCode: payload.responseCode,
-            corpCode: payload.corpCode,
-            processingDate: payload.processingDate,
-            checksum: payload.checksum
-          }],
-          checksum: payload.checksum
-        }
-      }
+    const [payouts] = await pool.execute(
+      'SELECT id FROM payout_requests WHERE crn = ? OR transaction_id = ?',
+      [payload.crn?.trim(), payload.transactionId]
+    );
+    
+    if (payouts.length === 0) {
+      console.log('❌ Orphan:', payload.crn);
+      return;
     }
-  };
-  
-  await updatePayoutStatus(payload.crn?.trim(), axisResponse);
+    
+    await pool.execute(`
+      INSERT INTO axis_callbacks (
+        payout_id, crn, transaction_id, utr_no, transaction_status,
+        status_description, response_code, batch_no, amount, raw_payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      payouts[0].id,
+      payload.crn?.trim(),
+      payload.transactionId,
+      payload.utrNo || null,
+      payload.transactionStatus || payload.status,        // ✅ Fallback
+      payload.statusDescription,
+      payload.responseCode || null,                      // ✅ Explicit NULL
+      payload.batchNo || null,
+      payload.amount,
+      JSON.stringify(payload)
+    ]);
+    
+    console.log('✅ Saved:', payload.crn);
+    
+    // Update payout status from callback
+    try {
+      const safeNull = (val) => val === '' || val == null ? null : val;
+      const axisResponse = {
+        decrypted: {
+          Data: {
+            data: {
+              CUR_TXN_ENQ: [{
+                crn: safeNull(payload.crn?.trim()),
+                transactionStatus: safeNull(payload.transactionStatus || payload.status),
+                statusDescription: safeNull(payload.statusDescription),
+                utrNo: safeNull(payload.utrNo),
+                batchNo: safeNull(payload.batchNo),
+                responseCode: safeNull(payload.responseCode),
+                corpCode: safeNull(payload.corpCode),
+                processingDate: safeNull(payload.processingDate),
+                checksum: safeNull(payload.checksum)
+              }],
+              checksum: safeNull(payload.checksum)
+            }
+          }
+        }
+      };
+      
+      await updatePayoutStatus(payload.crn?.trim(), axisResponse);
+    } catch (statusUpdateErr) {
+      console.error('⚠️  Status update failed for CRN', payload.crn, ':', statusUpdateErr.message);
+      // Don't re-throw - callback was already saved
+    }
+  } catch (err) {
+    console.error('❌ handleCallback Error:', err.message);
+    throw err;
+  }
 }
 
 
