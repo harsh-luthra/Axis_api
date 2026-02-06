@@ -155,9 +155,10 @@ async function updatePayoutStatus(crn, axisResponse) {
           WHEN ? = 2 THEN 'reject'
           ELSE 'pending'
         END, 
+        status_description = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE crn = ?
-    `, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
+    `, [txnStatusInt, txnStatusInt, txnStatusInt, safeNull(latestStatus.statusDescription), crn]);
 
     console.log(`✅ ${crn} → ${latestStatus.transactionStatus} (${txnStatusInt})`);
     return result;
