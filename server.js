@@ -54,6 +54,9 @@ async function getMerchantByApiKey(apiKey) {
   return merchants[0];
 }
 
+// 1. ADMIN ROUTES FIRST (Master Key only)
+app.use('/admin', adminRouter);  // ← BEFORE middleware
+
 // Enhanced middleware
 app.use(async (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
@@ -97,7 +100,11 @@ function buildGetBalanceData(corpAccNum) {
   return { Data: data };
 }
 
-app.post('/admin/generate-api-key', async (req, res) => {
+// 4. Separate admin router
+const adminRouter = express.Router();
+
+
+adminRouter.post('/generate-api-key', async (req, res) => {
   const masterKey = req.headers['x-master-key'];
   if (masterKey !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Invalid master key' });
@@ -143,7 +150,7 @@ app.post('/admin/generate-api-key', async (req, res) => {
 });
 
 // GET /admin/merchants (Master Key)
-app.get('/admin/merchants', async (req, res) => {
+adminRouter.get('/merchants', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -158,7 +165,7 @@ app.get('/admin/merchants', async (req, res) => {
 });
 
 // POST /admin/revoke-key/{merchantId}
-app.post('/admin/revoke-key/:id', async (req, res) => {
+adminRouter.post('/revoke-key/:id', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
