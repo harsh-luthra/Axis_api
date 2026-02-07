@@ -101,49 +101,58 @@ function buildGetBalanceData(corpAccNum) {
 }
 
 app.post('/admin/generate-api-key', async (req, res) => {
-  const masterKey = req.headers['x-master-key'];
-  if (masterKey !== config.MASTER_API_KEY) {
-    return res.status(403).json({ error: 'Invalid master key' });
-  }
-
-  const { merchant_name, corp_code, vendor_code, corporate_account } = req.body;
-  
-  if (!merchant_name) {
-    return res.status(400).json({ error: 'merchant_name required' });
-  }
-
   try {
-    // Create merchant
+    const masterKey = req.headers['x-master-key'];
+    console.log('🔑 Master key check:', !!masterKey); // DEBUG
+    
+    if (masterKey !== process.env.MASTER_API_KEY) {
+      console.log('❌ Invalid master key');
+      return res.status(403).json({ error: 'Invalid master key' });
+    }
+
+    const { merchant_name, corp_code, vendor_code, corporate_account } = req.body;
+    console.log('📝 Request:', { merchant_name, corp_code }); // DEBUG
+    
+    if (!merchant_name) {
+      return res.status(400).json({ error: 'merchant_name required' });
+    }
+
+    const apiKey = generateApiKey();
+    console.log('🆕 Generated key:', apiKey.slice(0, 16) + '...'); // DEBUG
+
+    // Insert merchant
     const [result] = await pool.execute(`
-      INSERT INTO merchants (api_key, merchant_name, corp_code, vendor_code, corporate_account)
-      VALUES (?, ?, ?, ?, ?)
-    `, [
-      generateApiKey(),  // Random 64-char key
-      merchant_name,
-      corp_code || null,
-      vendor_code || null,
-      corporate_account || null
-    ]);
-
+      INSERT INTO merchants (
+        api_key, merchant_name, corp_code, vendor_code, corporate_account
+      ) VALUES (?, ?, ?, ?, ?)
+    `, [apiKey, merchant_name, corp_code || null, vendor_code || null, corporate_account || null]);
+    
     const merchantId = result.insertId;
-    const newApiKey = await getMerchantApiKey(merchantId);
+    console.log('✅ Merchant created ID:', merchantId); // DEBUG
 
-    // Audit trail
+    // Audit
     await pool.execute(`
       INSERT INTO api_keys (merchant_id, new_key, generated_by, reason)
       VALUES (?, ?, ?, ?)
-    `, [merchantId, newApiKey, req.ip, 'New merchant onboarding']);
+    `, [merchantId, apiKey, req.ip || 'unknown', 'New merchant']);
 
     res.json({
       success: true,
       merchant_id: merchantId,
-      api_key: newApiKey,
+      api_key: apiKey,
       merchant_name
     });
+    
   } catch (err) {
-    res.status(500).json({ error: 'Failed to generate key' });
+    console.error('💥 DB Error:', err.message, err.code); // CRITICAL LOG
+    console.error('SQL State:', err.sqlState);
+    res.status(500).json({ 
+      error: 'Failed to generate key',
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal error'
+    });
   }
 });
+
 
 // GET /admin/merchants (Master Key)
 app.get('/admin/merchants', async (req, res) => {
