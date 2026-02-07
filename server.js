@@ -104,7 +104,7 @@ function buildGetBalanceData(corpAccNum) {
   return { Data: data };
 }
 
-app.post('/api/admin/generate-api-key', async (req, res) => {
+app.post('/admin/generate-api-key', async (req, res) => {
   try {
     const masterKey = req.headers['x-master-key'];
     console.log('🔑 Master key check:', !!masterKey); // DEBUG
@@ -159,7 +159,7 @@ app.post('/api/admin/generate-api-key', async (req, res) => {
 
 
 // GET /admin/merchants (Master Key)
-app.get('/api/admin/merchants', async (req, res) => {
+app.get('/admin/merchants', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -174,7 +174,7 @@ app.get('/api/admin/merchants', async (req, res) => {
 });
 
 // POST /admin/revoke-key/{merchantId}
-app.post('/api/admin/revoke-key/:id', async (req, res) => {
+app.post('/admin/revoke-key/:id', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
