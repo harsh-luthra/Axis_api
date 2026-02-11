@@ -317,6 +317,103 @@ async function getLatestBalance(merchantId) {
   return rows[0];
 }
 
+// ============================================================================
+// Cursor-paginated payout fetcher
+// ============================================================================
+/**
+ * Fetch payout_requests with cursor pagination.
+ * @param {number} merchantId - Merchant ID to filter by (optional: null for all)
+ * @param {number} limit - Rows per page (default 50, max 200)
+ * @param {string} cursor - Base64-encoded cursor (format: 'id_DESC' or 'id_ASC')
+ * @param {string} mode - 'full' (all fields) or 'half' (summary fields)
+ * @returns { payouts, nextCursor, hasMore }
+ */
+async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full') {
+  // Validate and normalize limit
+  const validLimits = [50, 100, 200];
+  if (!validLimits.includes(limit)) {
+    limit = 50; // default
+  }
+
+  // Decode cursor: format is "id_direction" base64-encoded
+  let cursorId = null;
+  let direction = 'DESC';
+  if (cursor) {
+    try {
+      const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+      const [id, dir] = decoded.split('_');
+      cursorId = parseInt(id, 10);
+      direction = dir === 'ASC' ? 'ASC' : 'DESC';
+    } catch (e) {
+      console.warn('Invalid cursor:', cursor);
+      cursorId = null;
+    }
+  }
+
+  // Select fields based on mode
+  const fullFields = `
+    id, merchant_id, crn, txn_paymode, txn_type, txn_amount,
+    bene_code, bene_name, bene_acc_num, bene_ifsc_code,
+    bene_bank_name, bene_email_addr1, bene_mobile_no,
+    corp_code, corp_acc_num, value_date, status, status_description,
+    transaction_id, utr_no, response_code, batch_no,
+    created_at, updated_at
+  `;
+  const halfFields = `
+    id, crn, txn_paymode, bene_acc_num, bene_ifsc_code, txn_amount, bene_name, status, status_description,
+    transaction_id, utr_no, response_code, batch_no, created_at, updated_at
+  `;
+  const selectFields = mode === 'half' ? halfFields : fullFields;
+
+  // Build WHERE clause
+  let whereClause = '1=1';
+  let params = [];
+
+  if (merchantId) {
+    whereClause += ' AND merchant_id = ?';
+    params.push(merchantId);
+  }
+
+  if (cursorId) {
+    whereClause += direction === 'DESC' ? ' AND id < ?' : ' AND id > ?';
+    params.push(cursorId);
+  }
+
+  // Fetch limit+1 to detect if there are more rows
+  const fetchLimit = limit + 1;
+
+  const [rows] = await pool.execute(`
+    SELECT ${selectFields}
+    FROM payout_requests
+    WHERE ${whereClause}
+    ORDER BY id ${direction}
+    LIMIT ?
+  `, [...params, fetchLimit]);
+
+  // Determine if there are more rows beyond this page
+  const hasMore = rows.length > limit;
+  const payouts = rows.slice(0, limit);
+
+  // Generate next cursor
+  let nextCursor = null;
+  if (hasMore && payouts.length > 0) {
+    const lastId = payouts[payouts.length - 1].id;
+    nextCursor = Buffer.from(`${lastId}_${direction}`).toString('base64');
+  }
+
+  return {
+    success: true,
+    payouts,
+    pagination: {
+      limit,
+      cursor: cursor || null,
+      nextCursor,
+      hasMore,
+      count: payouts.length
+    }
+  };
+}
+
 module.exports = {
   createFundTransfer,
   updatePayoutStatus,
@@ -324,5 +421,6 @@ module.exports = {
   saveBalanceSnapshot,
   getLatestBalance,
   getMerchantBalance,
-  checkFundTransferExists
+  checkFundTransferExists,
+  getPayoutsCursorPaginated
 };

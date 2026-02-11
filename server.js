@@ -538,6 +538,36 @@ app.post('/test-add-beneficiary', validateRequest(addBeneficiarySchema, 'body'),
   }
 });
 
+// --------- GET /payouts (cursor-paginated) ----------
+/**
+ * GET /payouts?limit=50&cursor=<base64>&mode=full
+ * Query params:
+ *   - limit: 50, 100, or 200 (default: 50)
+ *   - cursor: base64-encoded cursor for pagination (optional)
+ *   - mode: 'full' or 'half' response (default: 'full')
+ */
+app.get('/payouts', async (req, res) => {
+  try {
+    const merchantId = req.merchant?.id || null;  // From auth middleware
+    const limit = parseInt(req.query.limit) || 50;
+    const cursor = req.query.cursor || null;
+    const mode = req.query.mode || 'full';  // 'full' or 'half'
+
+    console.log(`📊 Fetching payouts: merchantId=${merchantId}, limit=${limit}, mode=${mode}`);
+
+    const result = await db.getPayoutsCursorPaginated(merchantId, limit, cursor, mode);
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ GET /payouts error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch payouts',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 
 // --------- ERROR HANDLER ----------
 
