@@ -27,13 +27,13 @@ const fundTransferSchema = Joi.object({
   valueDate: Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).required(), // YYYY-MM-DD
   beneAccNum: Joi.string().when('txnPaymode', {
     is: Joi.string().valid('RT', 'NE', 'FT'),
-    then: Joi.required(),
-    otherwise: Joi.optional()
-  }).max(30),
+    then: Joi.string().required().max(30),
+    otherwise: Joi.string().optional().max(30)
+  }),
   beneIfscCode: Joi.string().when('txnPaymode', {
     is: Joi.string().valid('RT', 'NE'),
-    then: Joi.required().length(11),
-    otherwise: Joi.optional()
+    then: Joi.string().required().length(11),
+    otherwise: Joi.string().optional().allow('', null)
   }),
   beneLEI: Joi.string().max(100).optional(),
   beneAddr1: Joi.string().max(100).optional(),
