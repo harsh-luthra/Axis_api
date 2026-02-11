@@ -331,6 +331,9 @@ async function getLatestBalance(merchantId) {
 // ============================================================================
 // Cursor-paginated payout fetcher (FINAL PRODUCTION VERSION)
 // ============================================================================
+// ============================================================================
+// FINAL WORKING VERSION - mysql2 LIMIT FIX
+// ============================================================================
 async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full') {
   const validLimits = [50, 100, 200];
   if (!validLimits.includes(limit)) limit = 50;
@@ -371,16 +374,19 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
 
   const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
   const fetchLimit = limit + 1;
-  const queryParams = [...whereParams, fetchLimit];
+  
+  // ✅ CRITICAL FIX: Convert LIMIT to STRING (mysql2 bug with numeric LIMIT)
+  const queryParams = whereParams.map(p => p.toString()).concat([fetchLimit.toString()]);
 
-  // ✅ FIXED: SQL declared OUTSIDE try-catch + single line for MySQL driver
+  // ✅ USE pool.query() INSTEAD OF pool.execute() - LIMIT workaround
   const sql = `SELECT ${selectClause} FROM payout_requests pr WHERE ${whereClause} ORDER BY pr.id ${direction} LIMIT ?`;
 
   try {
     console.log('📋 SQL:', sql);
     console.log('📋 Params:', JSON.stringify(queryParams));
     
-    const [rows] = await pool.execute(sql, queryParams);
+    // 🔥 mysql2 LIMIT FIX: Use query() not execute()
+    const [rows] = await pool.query(sql, queryParams);
 
     const hasMore = rows.length > limit;
     const payouts = rows.slice(0, limit);
@@ -407,10 +413,10 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     console.error('❌ ERROR - SQL:', sql);
     console.error('❌ ERROR - Params:', JSON.stringify(queryParams));
     console.error('❌ ERROR - Message:', err.message);
-    console.error('❌ ERROR - Code:', err.code);
     throw new Error(`Payout fetch failed: ${err.message}`);
   }
 }
+
 
 
 
