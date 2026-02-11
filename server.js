@@ -1,13 +1,13 @@
 require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
+// const bodyParser = require('body-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const morgan = require('morgan');
 
 const { verifyChecksumAxis } = require('./src/security/checksumAxis');
-const { decryptAes256Callback } = require('./src/security/aesCallback');
+// const { decryptAes256Callback } = require('./src/security/aesCallback');
 const { decryptCallback } = require('./src/security/axisAes128');
 // const { decryptHexAes128Ecb } = require('./src/security/axisAes128Ecb');
 const pool = require('./src/db/mysql');
@@ -29,7 +29,7 @@ const { validateRequest, generateApiKeySchema, fundTransferSchema, transferStatu
 const db = require('./src/db/payouts');
 
 // 2. Add proper logging middleware
-const logger = require('winston');  // or pino
+const logger = require('winston');// or pino
 
 const app = express();
 
@@ -99,7 +99,7 @@ async function getMerchantByApiKey(apiKey) {
 app.use(async (req, res, next) => {
   console.log(`➡️ ${req.method} ${req.path} from ${req.ip}`);
   // Skip API key auth for admin UI and for Axis callback webhook
-  if (req.path.startsWith('/admin/')){
+  if (req.path.startsWith('/admin/')) {
     console.log('🔒 Admin access, skipping API key auth');
     return next();
   }
@@ -159,7 +159,6 @@ app.post('/admin/generate-api-key', validateRequest(generateApiKeySchema, 'body'
     }
 
     const { merchant_name, corp_code, vendor_code, corporate_account } = req.body;
-    
     const apiKey = generateApiKey();
 
     // Insert merchant
@@ -186,7 +185,6 @@ app.post('/admin/generate-api-key', validateRequest(generateApiKeySchema, 'body'
     });
     
   } catch (err) {
-    // Log internally but do not expose details to client
     console.error('Admin generate-key error:', err.message);
     res.status(500).json({ 
       error: 'Failed to generate key',
@@ -362,7 +360,7 @@ app.post('/fund-transfer', validateRequest(fundTransferSchema, 'body'), async (r
       axisStatus: data.status || 'S',
       axisMessage: data.message || 'Transfer initiated successfully',
       crn: payload.custUniqRef,  // Client polls /status with this
-      // axisRef: data.txnReferenceId || null,
+      axisRef: data.txnReferenceId || null,
       // utr: data.utr || null,
       // raw: axisResult .raw,
       // decrypted
