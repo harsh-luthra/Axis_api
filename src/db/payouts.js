@@ -351,6 +351,10 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   }
 
   // Select fields based on mode
+  const halfFields = `
+    id, crn, txn_paymode, bene_acc_num, bene_ifsc_code, txn_amount, bene_name, status, status_description,
+    transaction_id, utr_no, response_code, batch_no, created_at, updated_at
+  `;
   const fullFields = `
     id, merchant_id, crn, txn_paymode, txn_type, txn_amount,
     bene_code, bene_name, bene_acc_num, bene_ifsc_code,
@@ -358,59 +362,67 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     transaction_id, utr_no, response_code, batch_no,
     created_at, updated_at
   `;
-  const halfFields = `
-    id, crn, txn_paymode, bene_acc_num, bene_ifsc_code, txn_amount, bene_name, status, status_description,
-    transaction_id, utr_no, response_code, batch_no, created_at, updated_at
-  `;
   const selectFields = mode === 'half' ? halfFields : fullFields;
 
-  // Build WHERE clause
-  let whereClause = '1=1';
+  // Build WHERE clause with parameters
+  let whereParts = [];
   let params = [];
 
   if (merchantId) {
-    whereClause += ' AND merchant_id = ?';
+    whereParts.push('merchant_id = ?');
     params.push(merchantId);
   }
 
-  if (cursorId) {
-    whereClause += direction === 'DESC' ? ' AND id < ?' : ' AND id > ?';
+  if (cursorId !== null) {
+    if (direction === 'DESC') {
+      whereParts.push('id < ?');
+    } else {
+      whereParts.push('id > ?');
+    }
     params.push(cursorId);
   }
+
+  const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
 
   // Fetch limit+1 to detect if there are more rows
   const fetchLimit = limit + 1;
 
-  const [rows] = await pool.execute(`
-    SELECT ${selectFields}
-    FROM payout_requests
-    WHERE ${whereClause}
-    ORDER BY id ${direction}
-    LIMIT ?
-  `, [...params, fetchLimit]);
+  try {
+    const [rows] = await pool.execute(`
+      SELECT ${selectFields}
+      FROM payout_requests
+      WHERE ${whereClause}
+      ORDER BY id ${direction}
+      LIMIT ?
+    `, [...params, fetchLimit]);
 
-  // Determine if there are more rows beyond this page
-  const hasMore = rows.length > limit;
-  const payouts = rows.slice(0, limit);
+    // Determine if there are more rows beyond this page
+    const hasMore = rows.length > limit;
+    const payouts = rows.slice(0, limit);
 
-  // Generate next cursor
-  let nextCursor = null;
-  if (hasMore && payouts.length > 0) {
-    const lastId = payouts[payouts.length - 1].id;
-    nextCursor = Buffer.from(`${lastId}_${direction}`).toString('base64');
-  }
-
-  return {
-    success: true,
-    payouts,
-    pagination: {
-      limit,
-      cursor: cursor || null,
-      nextCursor,
-      hasMore,
-      count: payouts.length
+    // Generate next cursor
+    let nextCursor = null;
+    if (hasMore && payouts.length > 0) {
+      const lastId = payouts[payouts.length - 1].id;
+      nextCursor = Buffer.from(`${lastId}_${direction}`).toString('base64');
     }
-  };
+
+    return {
+      success: true,
+      payouts,
+      pagination: {
+        limit,
+        cursor: cursor || null,
+        nextCursor,
+        hasMore,
+        count: payouts.length
+      }
+    };
+  } catch (err) {
+    console.error('❌ getPayoutsCursorPaginated error:', err.message);
+    console.error('Query debug:', { whereClause, params, limit: fetchLimit });
+    throw err;
+  }
 }
 
 module.exports = {
