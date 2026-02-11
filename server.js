@@ -33,8 +33,14 @@ const logger = require('winston');  // or pino
 const app = express();
 
 // Respect proxy headers (X-Forwarded-For) when running behind a proxy/load-balancer.
-// Set via environment variable in production (e.g. TRUST_PROXY=1) or defaults to 1.
-app.set('trust proxy', process.env.TRUST_PROXY || 1);
+// Default to trusting the first proxy unless explicitly disabled via TRUST_PROXY=false
+const _trustEnv = process.env.TRUST_PROXY;
+let trustProxyValue = true;
+if (typeof _trustEnv !== 'undefined') {
+  const v = String(_trustEnv).toLowerCase();
+  if (v === '0' || v === 'false' || v === 'no') trustProxyValue = false;
+}
+app.set('trust proxy', trustProxyValue);
 
 // app.use(bodyParser.json());
 // app.use(bodyParser.text({ type: '*/*' }));
