@@ -22,6 +22,7 @@ const fundTransferSchema = Joi.object({
   custUniqRef: Joi.string().required().max(30).trim(),
   txnType: Joi.string().valid('CUST', 'MERC', 'DIST', 'INTN', 'VEND').default('CUST'),
   txnAmount: Joi.string().regex(/^\d+(\.\d{1,2})?$/).required(), // accepts "1000" or "1000.50"
+  corpAccNum: Joi.string().max(30).optional().trim(),
   beneCode: Joi.string().required().max(30),
   beneName: Joi.string().required().max(70),
   valueDate: Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).required(), // YYYY-MM-DD
