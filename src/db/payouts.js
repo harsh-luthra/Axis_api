@@ -386,7 +386,7 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
 
   try {
     const sql = `
-      SELECT ${selectClause}
+      SELECT *
       FROM payout_requests
       WHERE ${whereClause}
       ORDER BY id ${direction}
@@ -394,6 +394,7 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     `;
     
     console.log('📋 Query debug:', { whereClause, paramCount: queryParams.length, queryParams, fetchLimit });
+    console.log('📋 SQL:', sql);
     
     const [rows] = await pool.execute(sql, queryParams);
 
