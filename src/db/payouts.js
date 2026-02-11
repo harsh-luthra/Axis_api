@@ -328,14 +328,14 @@ async function getLatestBalance(merchantId) {
  * @param {string} mode - 'full' (all fields) or 'half' (summary fields)
  * @returns { payouts, nextCursor, hasMore }
  */
+// ============================================================================
+// Cursor-paginated payout fetcher (FINAL PRODUCTION VERSION)
+// ============================================================================
 async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full') {
-  // Validate and normalize limit
   const validLimits = [50, 100, 200];
-  if (!validLimits.includes(limit)) {
-    limit = 50; // default
-  }
+  if (!validLimits.includes(limit)) limit = 50;
 
-  // Decode cursor: format is "id_direction" base64-encoded
+  // Decode cursor
   let cursorId = null;
   let direction = 'DESC';
   if (cursor) {
@@ -350,17 +350,12 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     }
   }
 
-  // ✅ FIXED: Select fields based on mode
-  let selectClause;
-  if (mode === 'half') {
-    selectClause = `pr.id, pr.crn, pr.txn_amount, pr.bene_name, pr.status, pr.created_at, pr.updated_at`;
-  } else {
-    selectClause = `pr.id, pr.merchant_id, pr.crn, pr.txn_paymode, pr.txn_type, pr.txn_amount,
-      pr.bene_code, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code,
-      pr.bene_bank_name, pr.corp_acc_num, pr.value_date, pr.status, pr.created_at, pr.updated_at`;
-  }
+  // Select fields
+  const selectClause = mode === 'half' 
+    ? 'pr.id, pr.crn, pr.txn_amount, pr.bene_name, pr.status, pr.created_at, pr.updated_at'
+    : 'pr.id, pr.merchant_id, pr.crn, pr.txn_paymode, pr.txn_type, pr.txn_amount, pr.bene_code, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code, pr.bene_bank_name, pr.corp_acc_num, pr.value_date, pr.status, pr.created_at, pr.updated_at';
 
-  // ✅ FIXED: Build WHERE clause with parameters correctly
+  // Build WHERE params
   let whereParts = [];
   let whereParams = [];
 
@@ -370,45 +365,26 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   }
 
   if (cursorId !== null) {
-    if (direction === 'DESC') {
-      whereParts.push('pr.id < ?');
-    } else {
-      whereParts.push('pr.id > ?');
-    }
+    whereParts.push(direction === 'DESC' ? 'pr.id < ?' : 'pr.id > ?');
     whereParams.push(cursorId);
   }
 
   const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
   const fetchLimit = limit + 1;
-  
-  // ✅ FIXED: Params = whereParams + LIMIT (exact match!)
   const queryParams = [...whereParams, fetchLimit];
 
+  // ✅ FIXED: SQL declared OUTSIDE try-catch + single line for MySQL driver
+  const sql = `SELECT ${selectClause} FROM payout_requests pr WHERE ${whereClause} ORDER BY pr.id ${direction} LIMIT ?`;
+
   try {
-    // ✅ FIXED: Use selectClause + table alias for safety
-    const sql = `SELECT ${selectClause} 
-                 FROM payout_requests pr 
-                 WHERE ${whereClause} 
-                 ORDER BY pr.id ${direction} 
-                 LIMIT ?`;
-    
-    console.log('📋 Query debug:', { 
-      whereClause, 
-      whereParams, 
-      fetchLimit, 
-      totalParams: queryParams.length,
-      sqlPreview: sql.substring(0, 200) + '...'
-    });
-    console.log('📋 Full SQL:', sql);
-    console.log('📋 Params array:', queryParams);
+    console.log('📋 SQL:', sql);
+    console.log('📋 Params:', JSON.stringify(queryParams));
     
     const [rows] = await pool.execute(sql, queryParams);
 
-    // Determine if there are more rows beyond this page
     const hasMore = rows.length > limit;
     const payouts = rows.slice(0, limit);
 
-    // Generate next cursor
     let nextCursor = null;
     if (hasMore && payouts.length > 0) {
       const lastId = payouts[payouts.length - 1].id;
@@ -428,13 +404,14 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
       }
     };
   } catch (err) {
-    console.error('❌ getPayoutsCursorPaginated error:', err.message);
-    console.error('SQL error code:', err.code);
-    console.error('SQL:', sql);
-    console.error('Params:', queryParams);
-    throw err;
+    console.error('❌ ERROR - SQL:', sql);
+    console.error('❌ ERROR - Params:', JSON.stringify(queryParams));
+    console.error('❌ ERROR - Message:', err.message);
+    console.error('❌ ERROR - Code:', err.code);
+    throw new Error(`Payout fetch failed: ${err.message}`);
   }
 }
+
 
 
 module.exports = {
