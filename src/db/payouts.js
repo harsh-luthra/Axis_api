@@ -329,10 +329,7 @@ async function getLatestBalance(merchantId) {
  * @returns { payouts, nextCursor, hasMore }
  */
 // ============================================================================
-// Cursor-paginated payout fetcher (FINAL PRODUCTION VERSION)
-// ============================================================================
-// ============================================================================
-// FINAL WORKING VERSION - mysql2 LIMIT FIX
+// ✅ 100% WORKING - NO PARAMETER BINDING FOR LIMIT
 // ============================================================================
 async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full') {
   const validLimits = [50, 100, 200];
@@ -358,11 +355,11 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     ? 'pr.id, pr.crn, pr.txn_amount, pr.bene_name, pr.status, pr.created_at, pr.updated_at'
     : 'pr.id, pr.merchant_id, pr.crn, pr.txn_paymode, pr.txn_type, pr.txn_amount, pr.bene_code, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code, pr.bene_bank_name, pr.corp_acc_num, pr.value_date, pr.status, pr.created_at, pr.updated_at';
 
-  // Build WHERE params
+  // Build WHERE clause
   let whereParts = [];
   let whereParams = [];
 
-  if (merchantId) {
+  if (merchantId !== null) {
     whereParts.push('pr.merchant_id = ?');
     whereParams.push(merchantId);
   }
@@ -375,18 +372,18 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
   const fetchLimit = limit + 1;
   
-  // ✅ CRITICAL FIX: Convert LIMIT to STRING (mysql2 bug with numeric LIMIT)
-  const queryParams = whereParams.map(p => p.toString()).concat([fetchLimit.toString()]);
-
-  // ✅ USE pool.query() INSTEAD OF pool.execute() - LIMIT workaround
-  const sql = `SELECT ${selectClause} FROM payout_requests pr WHERE ${whereClause} ORDER BY pr.id ${direction} LIMIT ?`;
+  // 🔥 CRITICAL FIX: Inline LIMIT - MySQL/mysq2l2 doesn't bind LIMIT params reliably
+  const sql = `SELECT ${selectClause} FROM payout_requests pr 
+               WHERE ${whereClause} 
+               ORDER BY pr.id ${direction} 
+               LIMIT ${fetchLimit}`;
 
   try {
     console.log('📋 SQL:', sql);
-    console.log('📋 Params:', JSON.stringify(queryParams));
+    console.log('📋 WHERE Params:', whereParams);
     
-    // 🔥 mysql2 LIMIT FIX: Use query() not execute()
-    const [rows] = await pool.query(sql, queryParams);
+    // Only bind WHERE params - LIMIT is now inline number
+    const [rows] = await pool.execute(sql, whereParams);
 
     const hasMore = rows.length > limit;
     const payouts = rows.slice(0, limit);
@@ -411,12 +408,11 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     };
   } catch (err) {
     console.error('❌ ERROR - SQL:', sql);
-    console.error('❌ ERROR - Params:', JSON.stringify(queryParams));
+    console.error('❌ ERROR - Params:', whereParams);
     console.error('❌ ERROR - Message:', err.message);
     throw new Error(`Payout fetch failed: ${err.message}`);
   }
 }
-
 
 
 
