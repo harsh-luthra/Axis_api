@@ -1,0 +1,3 @@
+# Placeholder file to track the certs directory.
+# Do NOT commit actual .p12, .key, or .pem files to git.
+# Store them securely and deploy via CI/CD or secret management.

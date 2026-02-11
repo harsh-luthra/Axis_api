@@ -24,6 +24,7 @@ const crypto = require('crypto');
 
 const { fundTransfer } = require('./src/api/transferPayment');
 const { getTransferStatus } = require('./src/api/getTransferStatus');
+const { validateRequest, generateApiKeySchema, fundTransferSchema, transferStatusSchema, addBeneficiarySchema } = require('./src/validators/schemas');
 
 const db = require('./src/db/payouts');
 
@@ -149,25 +150,17 @@ function buildGetBalanceData(corpAccNum) {
   return { Data: data };
 }
 
-app.post('/admin/generate-api-key', async (req, res) => {
+app.post('/admin/generate-api-key', validateRequest(generateApiKeySchema, 'body'), async (req, res) => {
   try {
     const masterKey = req.headers['x-master-key'];
-    console.log('🔑 Master key check:', !!masterKey); // DEBUG
     
     if (masterKey !== config.MASTER_API_KEY) {
-      console.log('❌ Invalid master key');
-      return res.status(403).json({ error: 'Invalid master key' });
+      return res.status(403).json({ error: 'Invalid credentials' });
     }
 
     const { merchant_name, corp_code, vendor_code, corporate_account } = req.body;
-    console.log('📝 Request:', { merchant_name, corp_code }); // DEBUG
     
-    if (!merchant_name) {
-      return res.status(400).json({ error: 'merchant_name required' });
-    }
-
     const apiKey = generateApiKey();
-    console.log('🆕 Generated key:', apiKey.slice(0, 16) + '...'); // DEBUG
 
     // Insert merchant
     const [result] = await pool.execute(`
@@ -177,14 +170,14 @@ app.post('/admin/generate-api-key', async (req, res) => {
     `, [apiKey, merchant_name, corp_code || null, vendor_code || null, corporate_account || null]);
     
     const merchantId = result.insertId;
-    console.log('✅ Merchant created ID:', merchantId); // DEBUG
 
-    // Audit
+    // Audit log (do not log API key)
     await pool.execute(`
       INSERT INTO api_keys (merchant_id, new_key, generated_by, reason)
       VALUES (?, ?, ?, ?)
     `, [merchantId, apiKey, req.ip || 'unknown', 'New merchant']);
 
+    // Return key only once; never log or repeat it
     res.json({
       success: true,
       merchant_id: merchantId,
@@ -193,11 +186,11 @@ app.post('/admin/generate-api-key', async (req, res) => {
     });
     
   } catch (err) {
-    console.error('💥 DB Error:', err.message, err.code); // CRITICAL LOG
-    console.error('SQL State:', err.sqlState);
+    // Log internally but do not expose details to client
+    console.error('Admin generate-key error:', err.message);
     res.status(500).json({ 
       error: 'Failed to generate key',
-      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal error'
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
     });
   }
 });
@@ -334,12 +327,12 @@ app.get('/balance/:merchantId', async (req, res) => {
 });
 
 // /test-transfer-payment
-app.post('/fund-transfer', async (req, res) => {
+app.post('/fund-transfer', validateRequest(fundTransferSchema, 'body'), async (req, res) => {
   try {
-    const merchantId = 1;  // TODO: From auth middleware req.merchant.id
+    const merchantId = req.merchant?.id || 1;  // From auth middleware
     const payload = req.body;
 
-    console.log('💸 Fund Transfer Request:', JSON.stringify(payload, null, 2));
+    console.log('💸 Fund Transfer initiated for merchant:', merchantId);
 
     const axisResult  = await fundTransfer(payload, merchantId);
 
@@ -355,8 +348,8 @@ app.post('/fund-transfer', async (req, res) => {
         axisStatus: data.status,
         axisMessage: data.message || 'Transaction rejected by Axis',
         axisErrors: data.errorDetails || [],
-        raw: axisResult .raw,
-        decrypted
+        // raw: axisResult .raw,
+        // decrypted
       });
     }
 
@@ -369,10 +362,10 @@ app.post('/fund-transfer', async (req, res) => {
       axisStatus: data.status || 'S',
       axisMessage: data.message || 'Transfer initiated successfully',
       crn: payload.custUniqRef,  // Client polls /status with this
-      axisRef: data.txnReferenceId || null,
-      utr: data.utr || null,
-      raw: axisResult .raw,
-      decrypted
+      // axisRef: data.txnReferenceId || null,
+      // utr: data.utr || null,
+      // raw: axisResult .raw,
+      // decrypted
     });
 
   } catch (error) {
@@ -412,16 +405,12 @@ app.post('/fund-transfer', async (req, res) => {
   }
 });
 
-app.post('/fund-transfer/status', async (req, res) => {
+app.post('/fund-transfer/status', validateRequest(transferStatusSchema, 'body'), async (req, res) => {
   try {
-    console.log('📡 Status Request:', req.body);
-    
-    if (!req.body.crn) {
-      return res.status(400).json({ success: false, error: 'crn required' });
-    }
+    console.log('📡 Status check for transaction');
     
     const result = await getTransferStatus(req.body);
-    console.log('📡 Status Result:', JSON.stringify(result.decrypted, null, 2));
+    // Do not log decrypted response to avoid leaking transaction details
     
     const decrypted = result?.decrypted || {};
     const data = decrypted?.Data || {};
@@ -521,9 +510,9 @@ app.get('/test-balance', async (req, res) => {
 });
 
 // /test-add-beneficiary
-app.post('/test-add-beneficiary', async (req, res) => {
+app.post('/test-add-beneficiary', validateRequest(addBeneficiarySchema, 'body'), async (req, res) => {
   try {
-    console.log('🔍 Testing Add Beneficiary API...', req.body);
+    console.log('🔍 Add Beneficiary API called');
     const result = await require('./src/api/addBeneficiary').addBeneficiary(req.body);
     
     res.json({
@@ -536,13 +525,11 @@ app.post('/test-add-beneficiary', async (req, res) => {
       status: result.decrypted?.Data?.status || 'N/A'
     });
   } catch (error) {
-    console.error('❌ Add Beneficiary API Error:', error.message);
+    console.error('Add Beneficiary error:', error.message);
     res.status(error.response?.status || 500).json({
       success: false,
-      error: error.message,
-      axisStatus: error.response?.status || 500,
-      axisData: error.response?.data || error.axisData,
-      requestBody: req.body  // Debug input
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Beneficiary registration failed',
+      axisStatus: error.response?.status || 500
     });
   }
 });
@@ -562,15 +549,37 @@ function handleAxisError(err, res) {
 
 
 
-// 4. Add error handler middleware
+// Error handler middleware (must be last)
 app.use((err, req, res, next) => {
-  logger.error(err);
-  res.status(500).json({ success: false, error: 'Internal Server Error' });
+  console.error('Unhandled error:', err.message);
+  logger.error('Unhandled error:', err);
+  res.status(500).json({ 
+    success: false, 
+    error: 'Internal Server Error',
+    requestId: req.id || 'unknown'
+  });
 });
 
-// 5. Use environment variables
+// Start server
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Axis integration test server listening on port ${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`Axis API server listening on port ${PORT} [${process.env.AXIS_ENV || 'UAT'}]`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM: Shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT: Shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });

@@ -1,0 +1,38 @@
+{
+  "env": {
+    "node": true,
+    "es2021": true
+  },
+  "extends": ["eslint:recommended"],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-console": ["warn", { "allow": ["warn", "error", "log"] }],
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "eqeqeq": ["error", "always"],
+    "curly": ["error", "all"],
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "no-script-url": "error",
+    "prefer-const": "error",
+    "no-var": "error",
+    "no-shadow": "warn",
+    "quote-props": ["error", "as-needed"],
+    "quotes": ["error", "single", { "avoidEscape": true }],
+    "semi": ["error", "always"],
+    "comma-dangle": ["error", "never"],
+    "indent": ["error", 2],
+    "keyword-spacing": "error",
+    "space-before-blocks": "error",
+    "object-curly-spacing": ["error", "always"],
+    "array-bracket-spacing": ["error", "never"],
+    "computed-property-spacing": ["error", "never"],
+    "no-multi-spaces": "error",
+    "brace-style": ["error", "1tbs"],
+    "no-trailing-spaces": "error",
+    "max-len": ["warn", { "code": 120 }]
+  }
+}

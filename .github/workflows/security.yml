@@ -1,0 +1,156 @@
+name: Security & Build Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    name: Security Checks
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # Check for hardcoded secrets
+      - name: Detect secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug
+
+      # Dependency vulnerability scanning
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # SAST (Static Application Security Testing) with Snyk
+      - name: Run Snyk
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Code Quality
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    name: Tests
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    name: Build & Validate Config
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Validate .env.example has all required keys
+      - name: Validate configuration
+        run: |
+          if [ ! -f .env.example ]; then
+            echo "❌ .env.example not found"
+            exit 1
+          fi
+          
+          required_keys=("AXIS_ENV" "DB_HOST" "TRUST_PROXY" "PORT")
+          for key in "${required_keys[@]}"; do
+            if ! grep -q "^$key=" .env.example; then
+              echo "❌ Missing required env var: $key"
+              exit 1
+            fi
+          done
+          echo "✓ Configuration valid"
+
+      # Verify .env is not committed
+      - name: Verify .env is gitignored
+        run: |
+          if git ls-files | grep -q '^\.env$'; then
+            echo "❌ .env is tracked in git!"
+            exit 1
+          fi
+          echo "✓ .env is properly gitignored"
+
+  deploy:
+    needs: [security, lint, test, build]
+    runs-on: ubuntu-latest
+    name: Deploy (on main only)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --only=production
+
+      # Example: Deploy to AWS Lambda, Heroku, DigitalOcean, etc.
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production..."
+          # Add your deployment command here
+          # Examples:
+          # - eb deploy (AWS Elastic Beanstalk)
+          # - git push heroku main (Heroku)
+          # - docker build && push to registry
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
