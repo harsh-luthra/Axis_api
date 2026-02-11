@@ -354,8 +354,7 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   const fullFields = `
     id, merchant_id, crn, txn_paymode, txn_type, txn_amount,
     bene_code, bene_name, bene_acc_num, bene_ifsc_code,
-    bene_bank_name, bene_email_addr1, bene_mobile_no,
-    corp_code, corp_acc_num, value_date, status, status_description,
+    bene_bank_name, bene_email_addr1, bene_mobile_no, corp_acc_num, value_date, status, status_description,
     transaction_id, utr_no, response_code, batch_no,
     created_at, updated_at
   `;
