@@ -352,7 +352,7 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
 
   // Select fields
   const selectClause = mode === 'half' 
-    ? 'pr.id, pr.crn, pr.txn_amount, pr.bene_name, pr.status, pr.created_at, pr.updated_at'
+    ? 'pr.id, pr.crn, pr.txn_paymode, pr.txn_amount, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code, pr.status, pr.status_description, pr.created_at, pr.updated_at'
     : 'pr.id, pr.merchant_id, pr.crn, pr.txn_paymode, pr.txn_type, pr.txn_amount, pr.bene_code, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code, pr.bene_bank_name, pr.corp_acc_num, pr.value_date, pr.status, pr.created_at, pr.updated_at';
 
   // Build WHERE clause
