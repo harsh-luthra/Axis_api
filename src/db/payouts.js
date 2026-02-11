@@ -162,9 +162,13 @@ async function updatePayoutStatus(crn, axisResponse) {
           ELSE 'pending'
         END, 
         status_description = ?,
+        response_code = ?,
+        batch_no = ?,
+        transaction_id = ?,
+        utr_no = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE crn = ?
-    `, [txnStatusInt, txnStatusInt, txnStatusInt, safeNull(latestStatus.statusDescription), crn]);
+    `, [txnStatusInt, txnStatusInt, txnStatusInt, safeNull(latestStatus.statusDescription), safeNull(latestStatus.responseCode), safeNull(latestStatus.batchNo), safeNull(latestStatus.transactionId), safeNull(latestStatus.utrNo), crn]);
 
     console.log(`✅ ${crn} → ${latestStatus.transactionStatus} (${txnStatusInt})`);
     return result;
@@ -208,6 +212,15 @@ async function handleCallback(payload) {
     ]);
     
     console.log('✅ Saved:', payload.crn);
+    // Persist utr_no and transaction_id back to payout_requests so main row reflects callback values
+    try {
+      await pool.execute(
+        'UPDATE payout_requests SET response_code = ?, batch_no = ?, utr_no = ?, transaction_id = ?, updated_at = CURRENT_TIMESTAMP WHERE crn = ?',
+        [payload.responseCode || null, payload.batchNo || null, payload.utrNo || null, payload.transactionId || null, payload.crn?.trim()]
+      );
+    } catch (uerr) {
+      console.warn('⚠️ Failed to update payout_requests response_code/batch_no/utr/transaction_id for', payload.crn, uerr.message);
+    }
     
     // Update payout status from callback
     try {

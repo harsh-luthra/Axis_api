@@ -109,6 +109,12 @@ app.use(async (req, res, next) => {
     return next();
   }
 
+  // Allow public healthcheck/monitoring endpoints (no auth)
+  if (req.path === '/pdown' || req.path.startsWith('/pdown/')) {
+    console.log('ℹ️ Healthcheck endpoint - skipping API key auth');
+    return next();
+  }
+
   const apiKey = req.headers['x-api-key'];
   if (!apiKey) return res.status(401).json({ error: 'X-API-Key required' });
 
