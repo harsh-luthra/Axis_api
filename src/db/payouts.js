@@ -350,27 +350,23 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     }
   }
 
-  // Select fields based on mode
-  const halfFields = `
-    id, crn, txn_paymode, bene_acc_num, bene_ifsc_code, txn_amount, bene_name, status, status_description,
-    transaction_id, utr_no, response_code, batch_no, created_at, updated_at
-  `;
-  const fullFields = `
-    id, merchant_id, crn, txn_paymode, txn_type, txn_amount,
-    bene_code, bene_name, bene_acc_num, bene_ifsc_code,
-    bene_bank_name, bene_email_addr1, bene_mobile_no, corp_acc_num, value_date, status, status_description,
-    transaction_id, utr_no, response_code, batch_no,
-    created_at, updated_at
-  `;
-  const selectFields = mode === 'half' ? halfFields : fullFields;
+  // Select fields based on mode (only use fields that definitely exist)
+  let selectClause;
+  if (mode === 'half') {
+    selectClause = `id, crn, txn_amount, bene_name, status, created_at, updated_at`;
+  } else {
+    selectClause = `id, merchant_id, crn, txn_paymode, txn_type, txn_amount,
+      bene_code, bene_name, bene_acc_num, bene_ifsc_code,
+      bene_bank_name, corp_acc_num, value_date, status, created_at, updated_at`;
+  }
 
   // Build WHERE clause with parameters
   let whereParts = [];
-  let params = [];
+  let queryParams = [];
 
   if (merchantId) {
     whereParts.push('merchant_id = ?');
-    params.push(merchantId);
+    queryParams.push(merchantId);
   }
 
   if (cursorId !== null) {
@@ -379,22 +375,27 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     } else {
       whereParts.push('id > ?');
     }
-    params.push(cursorId);
+    queryParams.push(cursorId);
   }
 
   const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
-
-  // Fetch limit+1 to detect if there are more rows
   const fetchLimit = limit + 1;
+  
+  // Add LIMIT parameter
+  queryParams.push(fetchLimit);
 
   try {
-    const [rows] = await pool.execute(`
-      SELECT ${selectFields}
+    const sql = `
+      SELECT ${selectClause}
       FROM payout_requests
       WHERE ${whereClause}
       ORDER BY id ${direction}
       LIMIT ?
-    `, [...params, fetchLimit]);
+    `;
+    
+    console.log('📋 Query debug:', { whereClause, paramCount: queryParams.length, queryParams, fetchLimit });
+    
+    const [rows] = await pool.execute(sql, queryParams);
 
     // Determine if there are more rows beyond this page
     const hasMore = rows.length > limit;
@@ -420,7 +421,7 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     };
   } catch (err) {
     console.error('❌ getPayoutsCursorPaginated error:', err.message);
-    console.error('Query debug:', { whereClause, params, limit: fetchLimit });
+    console.error('SQL error code:', err.code);
     throw err;
   }
 }
